@@ -36,6 +36,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Before Security/Common so probes are not blocked by ALLOWED_HOSTS or SSL redirect.
+    'config.middleware.HealthzMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

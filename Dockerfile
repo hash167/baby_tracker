@@ -24,7 +24,6 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev \
     && DJANGO_SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost \
-       DJANGO_SECURE_SSL_REDIRECT=false \
        python manage.py collectstatic --noinput \
     && mkdir -p /app/data /app/staticfiles \
     && chown -R app:app /app/data /app/staticfiles \
@@ -34,5 +33,5 @@ RUN uv sync --frozen --no-dev \
 EXPOSE 8000
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-# SQLite: keep a single worker to avoid lock contention.
+# SQLite: one worker and one replica only — multiple writers can corrupt the DB.
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--no-control-socket"]
