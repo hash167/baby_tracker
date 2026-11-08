@@ -43,7 +43,7 @@ Deployment and telemetry start during accounts and diapers. They are not deferre
 
 The agreed stack is Python and Django. Pages are rendered on the server. The browser stack is HTMX and plain JavaScript. HTMX is the vendored file [`static/js/htmx.min.js`](static/js/htmx.min.js). [`templates/base.html`](templates/base.html) loads that file and [`static/js/app.js`](static/js/app.js), and sets `hx-boost="true"` on the page body. `app.js` is empty, and the diaper, feeding, and import screens are still to be built. The app has no Node.js build, no Next.js app, and no TypeScript.
 
-PostgreSQL 16 is the database for local development, pytest, and production settings. SQLite is not supported; settings call `require_postgresql()` and raise if the engine is anything else. Connection settings come from `POSTGRES_*` environment variables (defaults match [`docker-compose.yml`](docker-compose.yml)). See [issue #8](https://github.com/hash167/baby_tracker/issues/8).
+PostgreSQL 16 is the database for local development, pytest, and production settings. SQLite is not supported; settings call `require_postgresql()` and raise if the engine is anything else. Local settings may use compose-compatible `POSTGRES_*` defaults. Production settings require `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_HOST` — there are no silent production defaults. See [issue #8](https://github.com/hash167/baby_tracker/issues/8).
 
 Versions locked in [`uv.lock`](uv.lock) today:
 
@@ -67,11 +67,20 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-`uv sync` installs the locked dependencies, including the `dev` group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. Defaults match compose (`POSTGRES_HOST=127.0.0.1`, database/user/password `baby_tracker`). Copy [`.env.example`](.env.example) to `.env` only when you need overrides. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console.
+`uv sync` installs the locked dependencies, including the `dev` group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. Local defaults match compose (`POSTGRES_HOST=127.0.0.1`, database/user/password `baby_tracker`). Copy [`.env.example`](.env.example) to `.env` only when you need overrides. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console. Compose publishes Postgres on `127.0.0.1:5432` only (not on all interfaces).
 
 `migrate` applies Django's built-in tables to PostgreSQL. The `tracker` app has no models yet.
 
-On macOS, plain `psycopg` needs Homebrew `libpq` available to the dynamic linker (`brew install libpq`).
+`psycopg` loads the system `libpq` shared library (there is no usable `psycopg-binary` wheel for Python 3.15 yet):
+
+- **Debian/Ubuntu:** `sudo apt-get install -y libpq5`
+- **macOS:** `brew install libpq`, then put the keg-only library on the linker fallback path before `uv run`:
+
+```bash
+export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix libpq)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+```
+
+[`scripts/test.sh`](scripts/test.sh) sets that macOS path automatically when Homebrew `libpq` is installed.
 
 `runserver` listens on `http://127.0.0.1:8000`.
 
@@ -100,7 +109,7 @@ docker run --rm -p 8000:8000 \
   baby-tracker
 ```
 
-The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.production` and installs `libpq5`. [`config/wsgi.py`](config/wsgi.py) and [`config/asgi.py`](config/asgi.py) default to that module as well. Production settings require `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and PostgreSQL via `POSTGRES_*`. [`docker/entrypoint.sh`](docker/entrypoint.sh) runs `python manage.py migrate --noinput` under a file lock, then starts gunicorn (`config.wsgi:application`, port 8000, one worker), dropping to the `app` user first.
+The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.production` and installs `libpq5`. [`config/wsgi.py`](config/wsgi.py) and [`config/asgi.py`](config/asgi.py) default to that module as well. Production settings require `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and explicit `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST`. [`docker/entrypoint.sh`](docker/entrypoint.sh) drops to the `app` user, then [`docker/migrate.py`](docker/migrate.py) waits for Postgres, takes a PostgreSQL advisory lock, runs migrations, and releases the lock before gunicorn starts (`config.wsgi:application`, port 8000, one worker).
 
 `GET /healthz` on the published port returns `ok`.
 

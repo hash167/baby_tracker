@@ -15,7 +15,7 @@ SECRET_KEY = os.environ.get(
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 DATABASES = {
-    'default': postgres_database_from_env(),
+    'default': postgres_database_from_env(allow_defaults=True),
 }
 require_postgresql(DATABASES)
 

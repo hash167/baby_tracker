@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: baby_tracker
       POSTGRES_PASSWORD: baby_tracker
     ports:
-      - "5432:5432"
+      # Loopback only — do not publish on all interfaces.
+      - "127.0.0.1:5432:5432"
     volumes:
       - baby_tracker_pgdata:/var/lib/postgresql/data
     healthcheck:

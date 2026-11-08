@@ -6,7 +6,6 @@ if [ "$(id -u)" = "0" ]; then
   exec runuser -u app -- /app/docker/entrypoint.sh "$@"
 fi
 
-# Serialize migrate within a single host/container start. Use one app replica
-# against a given database, or a dedicated migrate job, in real deployments.
-flock /tmp/baby_tracker_migrate.lock python manage.py migrate --noinput
+# Wait for Postgres, serialize migrate with a Postgres advisory lock, then start.
+python /app/docker/migrate.py
 exec "$@"

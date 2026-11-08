@@ -28,10 +28,12 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev \
     && DJANGO_SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost \
+       POSTGRES_HOST=localhost POSTGRES_DB=build \
+       POSTGRES_USER=build POSTGRES_PASSWORD=build \
        python manage.py collectstatic --noinput \
     && mkdir -p /app/staticfiles \
     && chown -R app:app /app/staticfiles \
-    && chmod +x /app/docker/entrypoint.sh
+    && chmod +x /app/docker/entrypoint.sh /app/docker/migrate.py
 
 # Entrypoint starts as root, then drops to app before migrate/gunicorn.
 # Runtime requires reachable PostgreSQL (POSTGRES_* env vars).

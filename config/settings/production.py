@@ -22,7 +22,8 @@ STORAGES = {
 }
 
 DATABASES = {
-    'default': postgres_database_from_env(),
+    # No credential defaults — missing POSTGRES_* must fail closed.
+    'default': postgres_database_from_env(allow_defaults=False),
 }
 require_postgresql(DATABASES)
 
