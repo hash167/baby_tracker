@@ -13,7 +13,6 @@ import logging
 import os
 import re
 from collections.abc import Mapping, Sequence
-from urllib.parse import urlsplit
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
@@ -126,21 +125,18 @@ _OTLP_HEADER_ENV_VARS = (
     'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
 )
 
-_ERROR_CLASS = re.compile(r'^[A-Z][A-Za-z0-9_]{0,80}$')
 _SDK_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*$')
-_STATIC_SEGMENT = re.compile(r'^[a-z][a-z0-9_-]{0,32}$')
 _DJANGO_CONVERTER = re.compile(r'<(?:int|str|slug|uuid|path):([A-Za-z_][A-Za-z0-9_]*)>')
 _DJANGO_BARE = re.compile(r'<([A-Za-z_][A-Za-z0-9_]*)>')
 _SQL_TOKEN = re.compile(r'^[A-Z]+')
-_SAFE_ROUTE = re.compile(
-    r'^/(?:$|[a-z][a-z0-9_-]{0,32}|\{[A-Za-z_][A-Za-z0-9_]*\})'
-    r'(?:/(?:[a-z][a-z0-9_-]{0,32}|\{[A-Za-z_][A-Za-z0-9_]*\}))*/?$'
-)
+_ROUTE_SEGMENT = re.compile(r'^(?:[A-Za-z0-9_.-]+|\{[A-Za-z_][A-Za-z0-9_]*\})$')
 # Space is allowed in span names ("GET /healthz") and checked separately.
 _LEAK_CHARS = frozenset('@?=&\n\r\t<>\'"`%')
 
 _configured = False
 _memory_exporter = None
+_route_templates: dict[str, frozenset[str]] = {}
+_error_classes: frozenset[str] | None = None
 
 
 def safe_resource() -> Resource:
@@ -177,8 +173,9 @@ def record_functional_attributes(
         span.set_attribute('app.outcome', outcome)
     if role in ROLES:
         span.set_attribute('app.role', role)
-    if isinstance(error_class, str) and _ERROR_CLASS.fullmatch(error_class):
-        span.set_attribute('error.type', error_class)
+    error_leaf = _allowed_error_leaf(error_class)
+    if error_leaf:
+        span.set_attribute('error.type', error_leaf)
 
 
 def otlp_traces_endpoint() -> str | None:
@@ -343,12 +340,7 @@ def redact_span(span: ReadableSpan) -> None:
 
     method = _method_from(original, span.name)
     status_code = _status_from(original)
-    route = None
-    if is_server:
-        # Resolver templates only. A raw URL path is not a route.
-        route = _route_from(original, span.name, templatize=False)
-    elif is_client_http:
-        route = _route_from(original, span.name, templatize=True)
+    route = _server_route(original, span.name) if is_server else None
 
     attributes: dict[str, str | int] = {}
     if method and (is_server or is_client_http or 'http.request.method' in original):
@@ -471,47 +463,47 @@ def _django_response_hook(span, request, response) -> None:
 
 def _urllib_request_hook(span, request) -> None:
     try:
-        url = getattr(request, 'full_url', '') or ''
         method = ''
         get_method = getattr(request, 'get_method', None)
         if callable(get_method):
             method = get_method() or ''
-        _rename_client_span(span, method, url)
+        _rename_client_span(span, method)
     except Exception:
         logger.debug('urllib telemetry hook failed', exc_info=True)
 
 
 def _urllib3_request_hook(span, instance, request_info) -> None:
     try:
-        _rename_client_span(
-            span,
-            getattr(request_info, 'method', '') or '',
-            getattr(request_info, 'url', '') or '',
-        )
+        _rename_client_span(span, getattr(request_info, 'method', '') or '')
     except Exception:
         logger.debug('urllib3 telemetry hook failed', exc_info=True)
 
 
-def _rename_client_span(span, method: str, url: str) -> None:
+def _rename_client_span(span, method: str) -> None:
+    """Name client spans with the method only.
+
+    Outbound URLs do not come from a route table. A path segment is not a
+    template just because it is lowercase, so the path is left off the span.
+    """
     if not span.is_recording():
         return
     safe_method = _method_from({}, method)
-    route = _normalize_route(url, templatize=True) if url else None
-    if safe_method and route:
-        span.update_name(f'{safe_method} {route}')
-        span.set_attribute('http.route', route)
-    elif safe_method:
+    if safe_method:
         span.update_name(safe_method)
 
 
 def _route_for_request(request) -> str | None:
     path = getattr(request, 'path', '') or ''
     if path.rstrip('/') == '/healthz':
-        return '/healthz'
-    match = getattr(request, 'resolver_match', None)
-    route = getattr(match, 'route', None) if match is not None else None
-    if isinstance(route, str) and route:
-        return _normalize_route(route, templatize=False)
+        candidate = '/healthz'
+    else:
+        match = getattr(request, 'resolver_match', None)
+        route = getattr(match, 'route', None) if match is not None else None
+        if not isinstance(route, str) or not route:
+            return None
+        candidate = _normalize_django_route(route)
+    if candidate and candidate in known_django_route_templates():
+        return candidate
     return None
 
 
@@ -598,83 +590,91 @@ def _status_from(attributes: Mapping[str, object]) -> int | None:
     return None
 
 
-def _route_from(
-    attributes: Mapping[str, object],
-    name: str,
-    *,
-    templatize: bool,
-) -> str | None:
+def known_django_route_templates() -> frozenset[str]:
+    """Route templates declared in the current URLconf, plus /healthz.
+
+    These strings come from URL patterns, not from request or client paths.
+    """
+    from django.urls import get_resolver, get_urlconf
+
+    urlconf = get_urlconf() or ''
+    cached = _route_templates.get(urlconf)
+    if cached is not None:
+        return cached
+    found = {'/healthz'}
+    try:
+        resolver = get_resolver(urlconf) if urlconf else get_resolver()
+        _collect_routes(resolver.url_patterns, '', found)
+    except Exception:
+        logger.debug('could not read Django URL patterns', exc_info=True)
+        return frozenset(found)
+    frozen = frozenset(found)
+    _route_templates[urlconf] = frozen
+    return frozen
+
+
+def _collect_routes(patterns, prefix: str, found: set[str]) -> None:
+    for pattern in patterns:
+        piece = ''
+        try:
+            route_pattern = pattern.pattern
+            raw = getattr(route_pattern, '_route', None)
+            piece = raw if isinstance(raw, str) else str(route_pattern)
+        except Exception:
+            piece = ''
+        combined = f'{prefix}{piece}'
+        nested = getattr(pattern, 'url_patterns', None)
+        if nested is not None:
+            _collect_routes(nested, combined, found)
+            continue
+        normalized = _normalize_django_route(combined)
+        if normalized:
+            found.add(normalized)
+
+
+def _server_route(attributes: Mapping[str, object], name: str) -> str | None:
+    known = known_django_route_templates()
     candidates: list[str] = []
-    keys = ('http.route', 'url.template')
-    if templatize:
-        # Client spans have no framework route. The path is templated and
-        # the query string is discarded.
-        keys = (
-            'http.route',
-            'url.template',
-            'url.path',
-            'url.full',
-            'http.url',
-            'http.target',
-        )
-    for key in keys:
-        value = attributes.get(key)
-        if isinstance(value, str):
-            candidates.append(value)
+    route = attributes.get('http.route')
+    if isinstance(route, str):
+        candidates.append(route)
     if name:
         candidates.append(name)
     for candidate in candidates:
-        route = _normalize_route(candidate, templatize=templatize)
-        if route:
-            return route
+        normalized = _normalize_django_route(candidate)
+        if normalized in known:
+            return normalized
     return None
 
 
-def _normalize_route(candidate: str, *, templatize: bool = False) -> str | None:
+def _normalize_django_route(candidate: str) -> str | None:
+    """Turn a Django route pattern into /events/{event_id}/ form.
+
+    This does not invent placeholders for path segments. A value is exported
+    only when it is also one of known_django_route_templates().
+    """
     text = candidate.strip()
     if not text or any(char in text for char in '\n\r\x00'):
         return None
     pieces = text.split(' ', 1)
     if len(pieces) == 2 and pieces[0].upper() in HTTP_METHODS:
         text = pieces[1].strip()
-    if '://' in text or text.startswith('//') or '@' in text:
-        parsed = urlsplit(
-            text if '://' in text or text.startswith('//') else 'http://' + text
-        )
-        text = parsed.path or '/'
-    else:
-        text = text.split('?', 1)[0].split('#', 1)[0]
+    if '://' in text or '@' in text or '?' in text or '#' in text:
+        return None
     text = _DJANGO_CONVERTER.sub(lambda match: '{' + match.group(1) + '}', text)
     text = _DJANGO_BARE.sub(lambda match: '{' + match.group(1) + '}', text)
-    if '<' in text or '>' in text:
+    if any(char in text for char in '<>@?=&\n\r\t\'"`%'):
         return None
     if not text.startswith('/'):
         text = '/' + text
-    if _SAFE_ROUTE.fullmatch(text):
-        return text
-    if templatize:
-        return _templatize_path(text)
-    return None
-
-
-def _templatize_path(path: str) -> str | None:
-    raw = path.split('?', 1)[0].split('#', 1)[0]
-    if not raw.startswith('/'):
-        raw = '/' + raw
-    segments = [segment for segment in raw.split('/') if segment]
-    templated = [
-        segment if _STATIC_SEGMENT.fullmatch(segment) else '{id}'
-        for segment in segments
-    ]
-    if not templated:
-        route = '/'
-    else:
-        route = '/' + '/'.join(templated)
-        if raw.endswith('/') and route != '/':
-            route += '/'
-    if _SAFE_ROUTE.fullmatch(route):
-        return route
-    return None
+    if '//' in text or ' ' in text:
+        return None
+    segments = [segment for segment in text.split('/') if segment]
+    if any(_ROUTE_SEGMENT.fullmatch(segment) is None for segment in segments):
+        return None
+    if text != '/' and not text.startswith('/'):
+        return None
+    return text
 
 
 def _db_operation(attributes: Mapping[str, object], name: str) -> str | None:
@@ -723,9 +723,62 @@ def _copy_functional(source: Mapping[str, object], dest: dict[str, str | int]) -
     role = source.get('app.role')
     if isinstance(role, str) and role in ROLES:
         dest['app.role'] = role
-    error = source.get('error.type')
-    if isinstance(error, str) and _ERROR_CLASS.fullmatch(error):
-        dest['error.type'] = error
+    error_leaf = _allowed_error_leaf(source.get('error.type'))
+    if error_leaf:
+        dest['error.type'] = error_leaf
+
+
+def allowed_error_classes() -> frozenset[str]:
+    """Exception class names defined by the runtime, Django, psycopg, and urllib.
+
+    Membership is the class object __name__, not a character pattern. A note
+    or name that merely looks like a class is not in this set.
+    """
+    global _error_classes
+    if _error_classes is None:
+        _error_classes = _load_error_classes()
+    return _error_classes
+
+
+def _load_error_classes() -> frozenset[str]:
+    import builtins
+    import importlib
+
+    names: set[str] = set()
+    modules: list[object] = [builtins]
+    for module_name in (
+        'django.core.exceptions',
+        'django.db',
+        'django.db.utils',
+        'django.http',
+        'psycopg',
+        'urllib.error',
+        'http.client',
+    ):
+        try:
+            modules.append(importlib.import_module(module_name))
+        except Exception:
+            continue
+    for module in modules:
+        for value in vars(module).values():
+            if not isinstance(value, type):
+                continue
+            try:
+                is_exception = issubclass(value, BaseException)
+            except TypeError:
+                continue
+            if is_exception and value.__name__:
+                names.add(value.__name__)
+    return frozenset(names)
+
+
+def _allowed_error_leaf(value: object) -> str | None:
+    if not isinstance(value, str) or not value or any(char.isspace() for char in value):
+        return None
+    leaf = value.rsplit('.', 1)[-1]
+    if leaf in allowed_error_classes():
+        return leaf
+    return None
 
 
 def _error_class_from_events(events) -> str | None:
@@ -733,11 +786,9 @@ def _error_class_from_events(events) -> str | None:
         if event.name != 'exception':
             continue
         raw = dict(event.attributes or {})
-        exc_type = raw.get('exception.type')
-        if isinstance(exc_type, str):
-            leaf = exc_type.rsplit('.', 1)[-1]
-            if _ERROR_CLASS.fullmatch(leaf):
-                return leaf
+        leaf = _allowed_error_leaf(raw.get('exception.type'))
+        if leaf:
+            return leaf
     return None
 
 
@@ -750,16 +801,13 @@ def _redact_events(events) -> tuple:
             continue
         attrs = {}
         raw = dict(event.attributes or {})
-        exc_type = raw.get('exception.type')
-        if isinstance(exc_type, str):
-            leaf = exc_type.rsplit('.', 1)[-1]
-            if _ERROR_CLASS.fullmatch(leaf):
-                attrs['exception.type'] = leaf
+        leaf = _allowed_error_leaf(raw.get('exception.type'))
+        if not leaf:
+            continue
+        attrs['exception.type'] = leaf
         escaped = raw.get('exception.escaped')
         if escaped in ('True', 'False'):
             attrs['exception.escaped'] = escaped
-        if not attrs:
-            continue
         safe.append(
             Event(name='exception', attributes=attrs, timestamp=event.timestamp)
         )
@@ -807,12 +855,13 @@ def _clean_context(context: SpanContext) -> SpanContext:
 
 
 def _name_is_safe(name: str) -> bool:
-    if name in DB_OPERATIONS or name in HTTP_METHODS or name == 'postgresql':
+    if name in DB_OPERATIONS or name in HTTP_METHODS or name in {'postgresql', 'span'}:
         return True
     method, _, rest = name.partition(' ')
-    if method in HTTP_METHODS and rest and _SAFE_ROUTE.fullmatch(rest):
-        return True
-    return bool(re.fullmatch(r'[a-z][a-z0-9_.-]{0,40}', name))
+    if method not in HTTP_METHODS or not rest:
+        return False
+    normalized = _normalize_django_route(rest)
+    return bool(normalized and normalized in known_django_route_templates())
 
 
 def _wipe_span(span: ReadableSpan) -> None:

@@ -18,6 +18,9 @@ def sensitive_event(request, event_id):
         role='parent.synthetic@example.com',
         error_class='parent.synthetic@example.com',
     )
+    # Class-shaped and lowercase payloads are not exception classes.
+    record_functional_attributes(error_class='SyntheticNoteAlpha9f3c')
+    record_functional_attributes(error_class='syntheticbabynameqq7')
     note = 'SyntheticNoteAlpha9f3c'
     with connection.cursor() as cursor:
         integration = getattr(

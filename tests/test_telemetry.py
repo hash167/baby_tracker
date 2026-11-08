@@ -10,7 +10,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
-from opentelemetry.trace import SpanContext, Status, StatusCode, TraceState
+from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceState
 
 from config.telemetry import (
     SanitizingSpanExporter,
@@ -27,10 +27,25 @@ EMAIL = 'parent.synthetic@example.com'
 TOKEN = 'synthetic-bearer-token'
 COOKIE = 'synthetic-cookie-value'
 IMPORT_ROW = 'SyntheticImportCsvRow77'
-SECRETS = (NOTE, BABY, CAREGIVER, EMAIL, TOKEN, COOKIE, IMPORT_ROW)
+# Lowercase on purpose: a letter-only path segment is still a name or note.
+LOWER_NAME = 'syntheticbabynameqq7'
+LOWER_NOTE = 'syntheticnotelowercase'
+LOWER_CAREGIVER = 'syntheticcaregiverww2'
+SECRETS = (
+    NOTE,
+    BABY,
+    CAREGIVER,
+    EMAIL,
+    TOKEN,
+    COOKIE,
+    IMPORT_ROW,
+    LOWER_NAME,
+    LOWER_NOTE,
+    LOWER_CAREGIVER,
+)
 
 RAW_EVENT_PATH = '/events/42/'
-RAW_OUTBOUND_PATH = '/babies/42/notes'
+RAW_OUTBOUND_PATH = f'/babies/{LOWER_NAME}/notes/{LOWER_NOTE}/{LOWER_CAREGIVER}'
 
 
 @pytest.fixture
@@ -178,6 +193,7 @@ def test_sensitive_request_and_db_spans_keep_route_status_and_timing(
     assert request_span.attributes['app.outcome'] == 'success'
     assert request_span.attributes['app.role'] == 'caregiver'
     assert 'email' not in request_span.attributes
+    assert 'error.type' not in request_span.attributes
     assert request_span.status.description in (None, '')
 
     db_spans = [
@@ -253,7 +269,83 @@ def test_unmatched_path_span_name_has_no_raw_path(client, exported_spans):
     assert 'http.route' not in server[0].attributes
 
 
-def test_outbound_http_span_uses_route_template(exported_spans):
+class _GateExporter:
+    """Stops forwarding after the test without shutting the processor down."""
+
+    def __init__(self, delegate) -> None:
+        self._delegate = delegate
+        self.open = True
+
+    def export(self, spans):
+        if not self.open:
+            from opentelemetry.sdk.trace.export import SpanExportResult
+
+            return SpanExportResult.SUCCESS
+        return self._delegate.export(spans)
+
+    def shutdown(self) -> None:
+        self.open = False
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
+
+class _OtlpCapture:
+    """Collect OTLP/HTTP bodies exported while a block of spans is recorded."""
+
+    def __init__(self) -> None:
+        self.bodies: list[bytes] = []
+        self._server: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+        self._gate: _GateExporter | None = None
+
+    def finish(self) -> bytes:
+        if self._gate is not None:
+            self._gate.open = False
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        return b''.join(self.bodies)
+
+
+def _capture_otlp_export() -> _OtlpCapture:
+    from opentelemetry import trace
+
+    capture = _OtlpCapture()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get('Content-Length', '0') or '0')
+            capture.bodies.append(self.rfile.read(length))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, fmt, *args):
+            return
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    capture._server = server
+    capture._thread = thread
+    exporter = build_otlp_exporter(f'http://127.0.0.1:{port}/v1/traces')
+    gate = _GateExporter(SanitizingSpanExporter(exporter))
+    capture._gate = gate
+    trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(gate))
+    return capture
+
+
+def _assert_payload_has_no_secrets(payload: bytes) -> None:
+    assert payload, 'collector did not receive an export'
+    for secret in SECRETS:
+        assert secret.encode() not in payload
+    assert b'/babies/' not in payload
+
+
+def test_outbound_http_omits_lowercase_names_and_notes(exported_spans):
     class Handler(BaseHTTPRequestHandler):
         def _reply(self):
             length = int(self.headers.get('Content-Length', '0') or '0')
@@ -275,6 +367,7 @@ def test_outbound_http_span_uses_route_template(exported_spans):
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    otlp_body = _capture_otlp_export()
     try:
         import urllib.request
 
@@ -301,20 +394,31 @@ def test_outbound_http_span_uses_route_template(exported_spans):
     finally:
         server.shutdown()
         server.server_close()
+        payload = otlp_body.finish()
+
+    _assert_payload_has_no_secrets(payload)
 
     spans = exported_spans.get_finished_spans()
     _assert_secrets_absent(spans)
     outbound = [
         span
         for span in spans
-        if span.attributes.get('http.route') == '/babies/{id}/notes'
+        if span.attributes.get('http.request.method') == 'POST'
+        and span.attributes.get('http.response.status_code') == 204
     ]
     assert len(outbound) == 1
     span = outbound[0]
-    assert span.name == 'POST /babies/{id}/notes'
-    assert span.attributes['http.request.method'] == 'POST'
-    assert span.attributes['http.response.status_code'] == 204
+    assert span.name == 'POST'
+    assert 'http.route' not in span.attributes
+    assert span.start_time is not None
+    assert span.end_time is not None
+    assert span.end_time >= span.start_time
     assert span.status.description in (None, '')
+    blob = _span_text([span])
+    assert LOWER_NAME not in blob
+    assert LOWER_NOTE not in blob
+    assert LOWER_CAREGIVER not in blob
+    assert '/babies/' not in blob
 
 
 def test_exporter_drops_links_resource_events_and_sql_text():
@@ -335,17 +439,23 @@ def test_exporter_drops_links_resource_events_and_sql_text():
         False,
         trace_state=TraceState([('vendor', NOTE)]),
     )
+    unsafe_error = type(NOTE, (Exception,), {})
+    lowercase_error = type(LOWER_NAME, (Exception,), {})
     with tracer.start_as_current_span(f'SELECT {NOTE}') as span:
         span.set_attribute('db.statement', f"SELECT '{NOTE}'")
         span.set_attribute('db.statement.parameters', f"['{NOTE}']")
         span.set_attribute('db.user', EMAIL)
+        span.set_attribute('error.type', NOTE)
         span.set_attribute(
             'url.full',
             f'http://user:{TOKEN}@example.test{RAW_OUTBOUND_PATH}?note={NOTE}',
         )
+        span.set_attribute('http.route', RAW_OUTBOUND_PATH)
         span.set_attribute('http.request.header.cookie', [f'sessionid={COOKIE}'])
         span.set_attribute('http.request.header.authorization', [f'Bearer {TOKEN}'])
         span.add_event('log', {'message': CAREGIVER, 'note': NOTE})
+        span.record_exception(unsafe_error(f'{NOTE} in exception message'))
+        span.record_exception(lowercase_error(LOWER_NOTE))
         span.record_exception(RuntimeError(f'{NOTE} in exception message'))
         span.set_status(Status(StatusCode.ERROR, f'{NOTE} in exception message'))
         span.add_link(
@@ -370,6 +480,8 @@ def test_exporter_drops_links_resource_events_and_sql_text():
     assert len(span.links[0].context.trace_state) == 0
     assert [event.name for event in span.events] == ['exception']
     assert span.events[0].attributes.get('exception.type') == 'RuntimeError'
+    assert span.attributes.get('error.type') == 'RuntimeError'
+    assert 'http.route' not in span.attributes
     provider.shutdown()
 
 
@@ -382,15 +494,16 @@ def test_otlp_payload_omits_secrets_and_vendor_headers(monkeypatch):
         'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
         'x-honeycomb-dataset=synthetic-vendor-key',
     )
-    received: dict = {}
+    received_headers: dict[str, str] = {}
+    bodies: list[bytes] = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            length = int(self.headers.get('Content-Length', '0'))
-            received['headers'] = {
-                key.lower(): value for key, value in self.headers.items()
-            }
-            received['body'] = self.rfile.read(length)
+            length = int(self.headers.get('Content-Length', '0') or '0')
+            received_headers.update(
+                {key.lower(): value for key, value in self.headers.items()}
+            )
+            bodies.append(self.rfile.read(length))
             self.send_response(200)
             self.end_headers()
 
@@ -399,33 +512,64 @@ def test_otlp_payload_omits_secrets_and_vendor_headers(monkeypatch):
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     port = server.server_address[1]
-    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    memory = InMemorySpanExporter()
     try:
         exporter = build_otlp_exporter(f'http://127.0.0.1:{port}/v1/traces')
         provider = TracerProvider(resource=safe_resource())
+        provider.add_span_processor(SimpleSpanProcessor(SanitizingSpanExporter(memory)))
         provider.add_span_processor(
             SimpleSpanProcessor(SanitizingSpanExporter(exporter))
         )
-        tracer = provider.get_tracer('telemetry-test')
-        with tracer.start_as_current_span(f'SELECT {NOTE}') as span:
-            span.set_attribute('db.statement', f"SELECT '{NOTE}' FROM notes")
+        tracer = provider.get_tracer('opentelemetry.instrumentation.urllib')
+        unsafe_error = type(NOTE, (Exception,), {})
+        lowercase_error = type(LOWER_NAME, (Exception,), {})
+        with tracer.start_as_current_span(
+            f'POST {RAW_OUTBOUND_PATH}',
+            kind=SpanKind.CLIENT,
+        ) as span:
+            span.set_attribute('http.request.method', 'POST')
+            span.set_attribute('http.response.status_code', 204)
             span.set_attribute(
-                'http.request.header.authorization',
-                [f'Bearer {TOKEN}'],
+                'url.full', f'http://127.0.0.1{RAW_OUTBOUND_PATH}?note={NOTE}'
             )
-            span.set_attribute('url.query', f'note={NOTE}&email={EMAIL}')
+            span.set_attribute('url.path', RAW_OUTBOUND_PATH)
+            span.set_attribute('http.route', RAW_OUTBOUND_PATH)
+            span.set_attribute('http.target', f'{RAW_OUTBOUND_PATH}?note={LOWER_NOTE}')
+            span.set_attribute('error.type', NOTE)
+            span.record_exception(unsafe_error(NOTE))
+            span.record_exception(lowercase_error(LOWER_NOTE))
+            span.record_exception(RuntimeError('boom'))
         provider.force_flush(3000)
-        thread.join(timeout=5)
     finally:
+        server.shutdown()
         server.server_close()
+        thread.join(timeout=5)
 
-    assert received.get('body'), 'collector did not receive an export'
-    header_blob = str(received['headers'])
+    payload = b''.join(bodies)
+    _assert_payload_has_no_secrets(payload)
+    header_blob = str(received_headers)
     assert 'synthetic-vendor-key' not in header_blob
     assert 'honeycomb' not in header_blob.lower()
-    for secret in SECRETS:
-        assert secret.encode() not in received['body']
+    spans = memory.get_finished_spans()
+    assert len(spans) == 1
+    _assert_secrets_absent(spans)
+    exported = spans[0]
+    assert exported.name == 'POST'
+    assert exported.attributes.get('http.request.method') == 'POST'
+    assert exported.attributes.get('http.response.status_code') == 204
+    assert 'http.route' not in exported.attributes
+    assert exported.attributes.get('error.type') == 'RuntimeError'
+    assert exported.start_time is not None
+    assert exported.end_time is not None
+    assert exported.end_time >= exported.start_time
+    event_types = [
+        event.attributes.get('exception.type')
+        for event in exported.events
+        if event.name == 'exception'
+    ]
+    assert event_types == ['RuntimeError']
 
 
 def test_unreachable_collector_does_not_break_requests(client, monkeypatch):
