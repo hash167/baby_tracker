@@ -32,9 +32,7 @@ def wait_for_database() -> None:
             last_error = exc
             connection.close()
             time.sleep(READY_INTERVAL)
-    raise SystemExit(
-        f'PostgreSQL not ready after {READY_TIMEOUT}s: {last_error}'
-    )
+    raise SystemExit(f'PostgreSQL not ready after {READY_TIMEOUT}s: {last_error}')
 
 
 def main() -> int:

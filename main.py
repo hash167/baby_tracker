@@ -1,6 +1,6 @@
 def main():
-    print("Hello from baby-tracker!")
+    print('Hello from baby-tracker!')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

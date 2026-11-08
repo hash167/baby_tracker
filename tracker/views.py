@@ -7,4 +7,4 @@ def home(request):
 
 
 def healthz(request):
-    return HttpResponse("ok", content_type="text/plain")
+    return HttpResponse('ok', content_type='text/plain')

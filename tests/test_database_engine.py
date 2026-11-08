@@ -46,11 +46,14 @@ def test_local_defaults_fill_missing_postgres_env(monkeypatch):
 
 
 def test_production_requires_postgres_credentials(monkeypatch):
+    # CI exports POSTGRES_PORT. Clear it so the default-port assertion
+    # checks the unset path, not an ambient value that happens to be 5432.
     for key in (
         'POSTGRES_DB',
         'POSTGRES_USER',
         'POSTGRES_PASSWORD',
         'POSTGRES_HOST',
+        'POSTGRES_PORT',
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -71,3 +74,7 @@ def test_production_requires_postgres_credentials(monkeypatch):
     assert db['HOST'] == 'db.internal'
     assert os.environ.get('POSTGRES_PORT') is None
     assert db['PORT'] == '5432'
+
+    monkeypatch.setenv('POSTGRES_PORT', '6543')
+    db = postgres_database_from_env(allow_defaults=False)
+    assert db['PORT'] == '6543'
