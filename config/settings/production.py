@@ -32,11 +32,18 @@ DATABASES = {
     }
 }
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'true').lower() in {
+_secure = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'true').lower() in {
     '1',
     'true',
     'yes',
 }
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = _secure
+SESSION_COOKIE_SECURE = _secure
+CSRF_COOKIE_SECURE = _secure
+# Keep container HTTP health checks working when SSL redirect is on.
+SECURE_REDIRECT_EXEMPT = [r'^healthz$']
+
+# Only trust X-Forwarded-Proto behind a proxy that overwrites that header.
+# Do not expose gunicorn directly to the internet when this is enabled.
+if os.environ.get('DJANGO_BEHIND_PROXY', '').lower() in {'1', 'true', 'yes'}:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
