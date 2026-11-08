@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>{% block title %}Baby Tracker{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
-  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{% static 'js/htmx.min.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
 </head>
 <body hx-boost="true">

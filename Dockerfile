@@ -2,7 +2,7 @@
 # Official images don't ship freethreaded 3.15t yet — use standard 3.15.
 FROM python:3.15-slim-bookworm
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /uvx /bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -21,11 +21,16 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev \
     && DJANGO_SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost \
+       DJANGO_SECURE_SSL_REDIRECT=false \
        uv run python manage.py collectstatic --noinput \
-    && chown -R app:app /app
+    && mkdir -p /app/data /app/staticfiles \
+    && chown -R app:app /app/data /app/staticfiles \
+    && chmod +x /app/docker/entrypoint.sh
 
 USER app
 
 EXPOSE 8000
 
-CMD ["uv", "run", "gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
+# SQLite: keep a single worker to avoid lock contention.
+CMD ["uv", "run", "gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1"]
