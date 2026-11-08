@@ -17,7 +17,8 @@ import factory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.base_user import AbstractBaseUser
 
-SYNTHETIC_PASSWORD = 'synthetic-not-a-real-password'
+# Fixed synthetic value for tests. Not a credential.
+SYNTHETIC_PASSWORD = 'synthetic-not-a-real-password'  # nosec B105
 
 
 @dataclass

@@ -1,0 +1,14 @@
+# Local secret scan (staged files) and the CSV / database-dump guard.
+# CI also runs gitleaks over the working tree and the full git history.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: forbid-data-files
+        name: block CSV exports outside tests/fixtures and database dumps
+        entry: python3 scripts/forbid_data_files.py
+        language: system
+        pass_filenames: true

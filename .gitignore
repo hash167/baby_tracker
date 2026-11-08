@@ -26,8 +26,20 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 *.sqlite3
+*.sqlite
 staticfiles/
 media/
+
+# Database dumps. CSV exports are rejected by scripts/forbid_data_files.py
+# except under tests/fixtures/.
+*.sql
+*.sql.gz
+*.sql.bz2
+*.sql.xz
+*.dump
+*.pgdump
+*.pgsql
+*.psql
 
 # Environment / secrets
 .env

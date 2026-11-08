@@ -113,7 +113,9 @@ The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.produc
 
 `GET /healthz` on the published port returns `ok`.
 
-Set `DJANGO_BEHIND_PROXY=true` only when a TLS-terminating proxy overwrites `X-Forwarded-Proto` and clients cannot reach gunicorn's port directly. The flag turns on the secure proxy header, the HTTPS redirect, and secure cookies together. `/healthz` is exempt from that redirect.
+Set `DJANGO_BEHIND_PROXY=true` only when a TLS-terminating proxy overwrites `X-Forwarded-Proto` and clients cannot reach gunicorn's port directly. The flag turns on the secure proxy header, the HTTPS redirect, secure cookies, and HSTS together. `/healthz` is exempt from that redirect. The public hostname, `CSRF_TRUSTED_ORIGINS`, and a content security policy are still [issue #36](https://github.com/hash167/baby_tracker/issues/36).
+
+`./scripts/deploy_check.sh` runs `manage.py check --deploy --fail-level WARNING` with `DJANGO_SETTINGS_MODULE=config.settings.production` and `DJANGO_BEHIND_PROXY=true`. That command must pass. The plain-HTTP container command above does not set the proxy flag, and `./scripts/deploy_check.sh --without-proxy` is expected to fail those HTTPS checks.
 
 Names and placeholders for these variables are in [`.env.example`](.env.example). Do not commit `.env`.
 
@@ -153,7 +155,27 @@ Playwright needs Node.js 22. It loads Django's admin login at `/admin/login/` (t
 | `CI / pytest` | pytest fails against that PostgreSQL service |
 | `CI / migrations` | `makemigrations --check` finds a missing migration, or `migrate` from an empty database fails |
 | `CI / playwright` | the Playwright login-page smoke test fails |
+| `CI / dependency-audit` | `pip-audit` reports a known vulnerability in `uv.lock` (runtime and dev groups) |
+| `CI / bandit` | Bandit reports an issue in first-party Python |
+| `CI / deploy-check` | `manage.py check --deploy --fail-level WARNING` fails with production settings and `DJANGO_BEHIND_PROXY=true` |
+| `CI / secrets` | gitleaks finds a secret in the working tree or any commit in the clone, a CSV export sits outside `tests/fixtures/`, a database dump is tracked, or the pre-commit hooks fail |
 
-A pull request with a failing unit test, a missing migration, or a failing Playwright test fails CI. Playwright uploads `e2e/test-results/` (traces and failure screenshots) only after a browser failure. Those artifacts are the login page, not household data.
+A pull request with a failing unit test, a missing migration, a failing Playwright test, a vulnerable locked dependency, a Bandit finding, a failing deploy check, or a secret / export / dump finding fails CI. Playwright uploads `e2e/test-results/` (traces and failure screenshots) only after a browser failure. Those artifacts are the login page, not household data. The secrets job checks out full history (`fetch-depth: 0`). Gitleaks then uses its default `git log --full-history --all`, so a secret introduced in an earlier commit of the branch still fails the job after it is deleted from the tip. A separate `--no-git` pass scans the working tree.
 
-These four names are the required status checks. Enabling them in branch protection is a repository setting and is not part of this change.
+The lint, pytest, migrations, and Playwright names are the required status checks called out when CI was added. The four security jobs fail the same workflow. Enabling any of them in branch protection is a repository setting and is not part of this change.
+
+## Security scanning
+
+[`.github/dependabot.yml`](.github/dependabot.yml) asks Dependabot to update the uv lockfile, the Dockerfile, `docker-compose.yml`, and GitHub Actions weekly. [`.pre-commit-config.yaml`](.pre-commit-config.yaml) runs gitleaks on staged changes and blocks CSV exports outside `tests/fixtures/` plus database dumps (`.sql`, `.dump`, `.sqlite`, `.db`, and the compressed forms listed in [`scripts/forbid_data_files.py`](scripts/forbid_data_files.py)).
+
+```bash
+./scripts/audit_dependencies.sh
+./scripts/bandit.sh
+./scripts/deploy_check.sh
+./scripts/scan_secrets.sh
+python3 scripts/forbid_data_files.py --all
+uvx pre-commit==4.7.0 install
+uvx pre-commit==4.7.0 run --all-files
+```
+
+`scan_secrets.sh` installs gitleaks 8.30.1 after checking the published checksum, then scans the working tree and every commit in the clone. Its summary prints the rule, path, and commit. It does not print secret values. Pinned versions: pip-audit 2.10.1, Bandit 1.9.4, gitleaks 8.30.1, pre-commit 4.7.0.

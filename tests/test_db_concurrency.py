@@ -17,7 +17,7 @@ def test_second_connection_sees_committed_row():
     User = get_user_model()
     User.objects.create_user(
         username='synth_concurrency_user',
-        password='unused-synthetic-password',
+        password='unused-synthetic-password',  # nosec B106
     )
 
     other = connections.create_connection('default')

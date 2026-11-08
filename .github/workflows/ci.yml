@@ -1,5 +1,7 @@
 # Required status checks: CI / lint, CI / pytest, CI / migrations, CI / playwright.
-# Branch protection is a repository setting and is not configured here.
+# Security jobs below also fail this workflow: dependency-audit, bandit,
+# deploy-check, and secrets. Branch protection is a repository setting and is
+# not configured here.
 # Credentials match docker-compose.yml. They are local/dev values, not production secrets.
 name: CI
 
@@ -178,3 +180,69 @@ jobs:
             e2e/playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Audit locked dependencies
+        run: ./scripts/audit_dependencies.sh
+
+  bandit:
+    name: bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Bandit
+        run: ./scripts/bandit.sh
+
+  deploy-check:
+    name: deploy-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libpq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq5
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python and dependencies
+        run: |
+          uv python install
+          uv sync --frozen
+      - name: Django check --deploy
+        run: ./scripts/deploy_check.sh
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Scan working tree and full git history
+        run: ./scripts/scan_secrets.sh
+      - name: Block CSV exports and database dumps
+        run: python3 scripts/forbid_data_files.py --all
+      - name: Pre-commit hooks
+        run: uvx pre-commit==4.7.0 run --all-files
