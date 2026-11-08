@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__
+**/__pycache__
+*.py[cod]
+*.sqlite3
+db.sqlite3
+.env
+.env.*
+!.env.example
+.python-version
+.cursor
+README.md
+*.md
+staticfiles
+.DS_Store
