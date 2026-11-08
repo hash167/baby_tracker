@@ -2,7 +2,7 @@
 
 Baby Tracker is a mobile-friendly web app for shared baby care. Parents and caregivers will use one site to record diapers and breastfeeding and to read a shared timeline. Accounts are planned to be invite-only, with an admin who invites people, changes roles, and deactivates accounts.
 
-The running code is the Django skeleton from [Django project skeleton, settings and container image](https://github.com/hash167/baby_tracker/issues/7), merged in [pull request #43](https://github.com/hash167/baby_tracker/pull/43). That skeleton serves a home page and `/healthz`. Accounts, diaper logging, feeding timers, the shared timeline, CSV import, PostgreSQL, the automated test suite, and deployment are still planned. They are specified in the epics below and are not part of the app you can run today.
+The running code is the Django skeleton from [Django project skeleton, settings and container image](https://github.com/hash167/baby_tracker/issues/7), merged in [pull request #43](https://github.com/hash167/baby_tracker/pull/43), plus local PostgreSQL, pytest, and GitHub Actions CI. The app serves a home page and `/healthz`. Accounts, diaper logging, feeding timers, the shared timeline, CSV import, and deployment are still planned. They are specified in the epics below and are not part of the app you can run today.
 
 ## What the app will do
 
@@ -41,7 +41,7 @@ Deployment and telemetry start during accounts and diapers. They are not deferre
 
 ## Stack
 
-The agreed stack is Python and Django. Pages are rendered on the server. The browser stack is HTMX and plain JavaScript. HTMX is the vendored file [`static/js/htmx.min.js`](static/js/htmx.min.js). [`templates/base.html`](templates/base.html) loads that file and [`static/js/app.js`](static/js/app.js), and sets `hx-boost="true"` on the page body. `app.js` is empty, and the diaper, feeding, and import screens are still to be built. The app has no Node.js build, no Next.js app, and no TypeScript.
+The agreed stack is Python and Django. Pages are rendered on the server. The browser stack is HTMX and plain JavaScript. HTMX is the vendored file [`static/js/htmx.min.js`](static/js/htmx.min.js). [`templates/base.html`](templates/base.html) loads that file and [`static/js/app.js`](static/js/app.js), and sets `hx-boost="true"` on the page body. `app.js` is empty, and the diaper, feeding, and import screens are still to be built. The app has no Node.js build, no Next.js app, and no TypeScript. The Playwright harness in [`e2e/`](e2e/) is plain TypeScript and is only for browser tests.
 
 PostgreSQL 16 is the database for local development, pytest, and production settings. SQLite is not supported; settings call `require_postgresql()` and raise if the engine is anything else. Local settings may use compose-compatible `POSTGRES_*` defaults. Production settings require `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_HOST` — there are no silent production defaults. See [issue #8](https://github.com/hash167/baby_tracker/issues/8).
 
@@ -53,7 +53,7 @@ Versions locked in [`uv.lock`](uv.lock) today:
 - gunicorn 26.2.0
 - WhiteNoise 6.12.0
 - psycopg 3.3.x
-- django-debug-toolbar 8.0.0, pytest, and pytest-django in the `dev` group
+- django-debug-toolbar 8.0.0, pytest, pytest-django, factory-boy, and ruff in the `dev` group
 
 ## Run it locally
 
@@ -127,7 +127,7 @@ OpenTelemetry is planned to export to Honeycomb, with alarms for sustained failu
 
 ## Tests
 
-pytest and pytest-django run against PostgreSQL only (test DB created and destroyed each run; do not pass `--reuse-db` unless you intend to keep it). Playwright and CI wiring are later tickets.
+pytest and pytest-django run against PostgreSQL only (test DB created and destroyed each run; do not pass `--reuse-db` unless you intend to keep it).
 
 ```bash
 ./scripts/test.sh
@@ -135,4 +135,25 @@ pytest and pytest-django run against PostgreSQL only (test DB created and destro
 uv run pytest
 ```
 
-[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). Fixtures use synthetic data only.
+[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories are in-memory until the core models in [issue #11](https://github.com/hash167/baby_tracker/issues/11) exist. Caregivers are Django users. Tests and factories use synthetic data only.
+
+Playwright needs Node.js 22. It loads Django's admin login at `/admin/login/` (the product login page is still planned). Start PostgreSQL, migrate, and `runserver`, then:
+
+```bash
+./scripts/e2e.sh
+```
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. A temporary PostgreSQL 16 service backs pytest, migration checks, and Playwright. No GitHub Actions secrets are used. The database user, name, and password are the same public local values as [`docker-compose.yml`](docker-compose.yml).
+
+| Status check | Fails when |
+| --- | --- |
+| `CI / lint` | `ruff check` or `ruff format --check` fails |
+| `CI / pytest` | pytest fails against that PostgreSQL service |
+| `CI / migrations` | `makemigrations --check` finds a missing migration, or `migrate` from an empty database fails |
+| `CI / playwright` | the Playwright login-page smoke test fails |
+
+A pull request with a failing unit test, a missing migration, or a failing Playwright test fails CI. Playwright uploads `e2e/test-results/` (traces and failure screenshots) only after a browser failure. Those artifacts are the login page, not household data.
+
+These four names are the required status checks. Enabling them in branch protection is a repository setting and is not part of this change.

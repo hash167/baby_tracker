@@ -15,8 +15,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "django-debug-toolbar>=8.0.0",
+    "factory-boy>=3.3.3",
     "pytest>=8.4.2",
     "pytest-django>=4.11.1",
+    "ruff>=0.17.4",
 ]
 
 [tool.pytest.ini_options]
@@ -24,3 +26,17 @@ DJANGO_SETTINGS_MODULE = "config.settings.local"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 addopts = ["-q"]
 # Do not pass --reuse-db: the test database is created and destroyed each run.
+
+[tool.ruff]
+line-length = 88
+target-version = "py315"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Django settings modules import * by convention.
+"config/settings/*.py" = ["F403", "F405"]
+
+[tool.ruff.format]
+quote-style = "single"
