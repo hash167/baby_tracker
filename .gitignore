@@ -10,3 +10,4 @@
 *.pyzwzwz
 *.pyzwzwzw
 *.env
+__pycache__/
