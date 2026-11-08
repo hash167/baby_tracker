@@ -1,6 +1,7 @@
 import os
 
 from .base import *
+from .database import postgres_database_from_env, require_postgresql
 
 DEBUG = True
 
@@ -12,6 +13,11 @@ SECRET_KEY = os.environ.get(
 )
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+DATABASES = {
+    'default': postgres_database_from_env(),
+}
+require_postgresql(DATABASES)
 
 INSTALLED_APPS += [
     'debug_toolbar',

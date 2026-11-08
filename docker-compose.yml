@@ -1,0 +1,21 @@
+# Local PostgreSQL for development and pytest (major version aligned with planned production).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: baby_tracker
+      POSTGRES_USER: baby_tracker
+      POSTGRES_PASSWORD: baby_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - baby_tracker_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U baby_tracker -d baby_tracker"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  baby_tracker_pgdata:
