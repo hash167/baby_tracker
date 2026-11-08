@@ -43,9 +43,7 @@ Deployment and telemetry start during accounts and diapers. They are not deferre
 
 The agreed stack is Python and Django. Pages are rendered on the server. The browser stack is HTMX and plain JavaScript. HTMX is the vendored file [`static/js/htmx.min.js`](static/js/htmx.min.js). [`templates/base.html`](templates/base.html) loads that file and [`static/js/app.js`](static/js/app.js), and sets `hx-boost="true"` on the page body. `app.js` is empty, and the diaper, feeding, and import screens are still to be built. The app has no Node.js build, no Next.js app, and no TypeScript.
 
-PostgreSQL is the planned database for production and for integration tests. Nothing in the repository connects to PostgreSQL yet.
-
-SQLite is allowed only for the skeleton in [issue #7](https://github.com/hash167/baby_tracker/issues/7), so local development and the container can start without a database server. [`config/settings/local.py`](config/settings/local.py) uses the SQLite file `db.sqlite3` from [`config/settings/base.py`](config/settings/base.py). [`config/settings/production.py`](config/settings/production.py) also still uses SQLite, at `DJANGO_DB_PATH` or `data/db.sqlite3`. Later tickets replace the deployed database and the integration-test database with PostgreSQL. The skeleton SQLite file does not stand in for those tests.
+PostgreSQL 16 is the database for local development, pytest, and production settings. SQLite is not supported; settings call `require_postgresql()` and raise if the engine is anything else. Local settings may use compose-compatible `POSTGRES_*` defaults. Production settings require `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_HOST` — there are no silent production defaults. See [issue #8](https://github.com/hash167/baby_tracker/issues/8).
 
 Versions locked in [`uv.lock`](uv.lock) today:
 
@@ -54,22 +52,35 @@ Versions locked in [`uv.lock`](uv.lock) today:
 - django-htmx 1.29.0
 - gunicorn 26.2.0
 - WhiteNoise 6.12.0
-- django-debug-toolbar 8.0.0, in the `dev` group, imported only by local settings
+- psycopg 3.3.x
+- django-debug-toolbar 8.0.0, pytest, and pytest-django in the `dev` group
 
 ## Run it locally
 
-Install [uv](https://docs.astral.sh/uv/) and Python 3.15. uv can install the interpreter named in `.python-version`. From the repository root:
+Install [uv](https://docs.astral.sh/uv/), Python 3.15, and Docker. From the repository root, start PostgreSQL 16, then the app:
 
 ```bash
+docker compose up -d --wait db
 uv sync
 uv run python manage.py check
 uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-`uv sync` installs the locked dependencies, including the dev group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. This path does not need PostgreSQL or a `.env` file. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console. Nothing in the skeleton sends mail.
+`uv sync` installs the locked dependencies, including the `dev` group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. Local defaults match compose (`POSTGRES_HOST=127.0.0.1`, database/user/password `baby_tracker`). Copy [`.env.example`](.env.example) to `.env` only when you need overrides. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console. Compose publishes Postgres on `127.0.0.1:5432` only (not on all interfaces).
 
-`migrate` creates `db.sqlite3` in the repository root and applies Django's built-in tables. The `tracker` app has no models yet. `db.sqlite3` is gitignored.
+`migrate` applies Django's built-in tables to PostgreSQL. The `tracker` app has no models yet.
+
+`psycopg` loads the system `libpq` shared library (there is no usable `psycopg-binary` wheel for Python 3.15 yet):
+
+- **Debian/Ubuntu:** `sudo apt-get install -y libpq5`
+- **macOS:** `brew install libpq`, then put the keg-only library on the linker fallback path before `uv run`:
+
+```bash
+export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix libpq)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+```
+
+[`scripts/test.sh`](scripts/test.sh) sets that macOS path automatically when Homebrew `libpq` is installed.
 
 `runserver` listens on `http://127.0.0.1:8000`.
 
@@ -81,23 +92,30 @@ uv run python manage.py runserver
 
 ## Container image
 
-The optional image is the same skeleton, with production settings and SQLite. It is not a k3s deploy.
+The optional image uses production settings and requires a reachable PostgreSQL. It is not a k3s deploy.
 
 ```bash
+docker compose up -d --wait db
 docker build -t baby-tracker .
 docker run --rm -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
   -e DJANGO_SECRET_KEY=change-me \
   -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+  -e POSTGRES_HOST=host.docker.internal \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=baby_tracker \
+  -e POSTGRES_USER=baby_tracker \
+  -e POSTGRES_PASSWORD=baby_tracker \
   baby-tracker
 ```
 
-The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.production`. [`config/wsgi.py`](config/wsgi.py) and [`config/asgi.py`](config/asgi.py) default to that module as well. Production settings require `DJANGO_SECRET_KEY` and `DJANGO_ALLOWED_HOSTS`. [`docker/entrypoint.sh`](docker/entrypoint.sh) runs `python manage.py migrate --noinput` under a file lock, then the image starts gunicorn (`config.wsgi:application`, port 8000, one worker). The database file defaults to `/app/data/db.sqlite3` inside the image (`DJANGO_DB_PATH` overrides it). Use one replica for that file. The entrypoint starts as root only long enough to prepare the data directory, then drops to the `app` user.
+The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.production` and installs `libpq5`. [`config/wsgi.py`](config/wsgi.py) and [`config/asgi.py`](config/asgi.py) default to that module as well. Production settings require `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and explicit `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST`. [`docker/entrypoint.sh`](docker/entrypoint.sh) drops to the `app` user, then [`docker/migrate.py`](docker/migrate.py) waits for Postgres, takes a PostgreSQL advisory lock, runs migrations, and releases the lock before gunicorn starts (`config.wsgi:application`, port 8000, one worker).
 
 `GET /healthz` on the published port returns `ok`.
 
 Set `DJANGO_BEHIND_PROXY=true` only when a TLS-terminating proxy overwrites `X-Forwarded-Proto` and clients cannot reach gunicorn's port directly. The flag turns on the secure proxy header, the HTTPS redirect, and secure cookies together. `/healthz` is exempt from that redirect.
 
-Names and placeholders for these variables are in [`.env.example`](.env.example). Copy that file to `.env` only on a machine that needs the variables. Do not commit `.env`.
+Names and placeholders for these variables are in [`.env.example`](.env.example). Do not commit `.env`.
 
 ## Planned hosting and operations
 
@@ -109,6 +127,12 @@ OpenTelemetry is planned to export to Honeycomb, with alarms for sustained failu
 
 ## Tests
 
-The planned strategy is pytest and pytest-django against a real PostgreSQL database, plus Playwright driving the plain JavaScript UI. The important cases are timer correctness, permissions, concurrency (one active feed per baby, idempotent saves), and import correctness (validation, preview, and deduplication).
+pytest and pytest-django run against PostgreSQL only (test DB created and destroyed each run; do not pass `--reuse-db` unless you intend to keep it). Playwright and CI wiring are later tickets.
 
-That suite is not in the tree. [`pyproject.toml`](pyproject.toml) does not depend on pytest or Playwright. There is no `.github` workflow. [`tracker/tests.py`](tracker/tests.py) is Django's empty `TestCase` placeholder. The SQLite database used by the skeleton is not the planned PostgreSQL integration database.
+```bash
+./scripts/test.sh
+# or, with Postgres already up:
+uv run pytest
+```
+
+[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). Fixtures use synthetic data only.

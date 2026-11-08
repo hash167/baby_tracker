@@ -13,6 +13,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Writable home outside the root-owned source tree (gunicorn writes ~/.gunicorn).
 RUN groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
@@ -24,14 +28,16 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev \
     && DJANGO_SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost \
+       POSTGRES_HOST=localhost POSTGRES_DB=build \
+       POSTGRES_USER=build POSTGRES_PASSWORD=build \
        python manage.py collectstatic --noinput \
-    && mkdir -p /app/data /app/staticfiles \
-    && chown -R app:app /app/data /app/staticfiles \
-    && chmod +x /app/docker/entrypoint.sh
+    && mkdir -p /app/staticfiles \
+    && chown -R app:app /app/staticfiles \
+    && chmod +x /app/docker/entrypoint.sh /app/docker/migrate.py
 
-# Entrypoint starts as root to chown mounted volumes, then drops to app.
+# Entrypoint starts as root, then drops to app before migrate/gunicorn.
+# Runtime requires reachable PostgreSQL (POSTGRES_* env vars).
 EXPOSE 8000
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-# SQLite: one worker and one replica only — multiple writers can corrupt the DB.
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--no-control-socket"]

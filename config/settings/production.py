@@ -1,7 +1,7 @@
 import os
-from pathlib import Path
 
 from .base import *
+from .database import postgres_database_from_env, require_postgresql
 
 SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 ALLOWED_HOSTS = [
@@ -21,16 +21,11 @@ STORAGES = {
     },
 }
 
-# Persist SQLite on a mounted volume (default /app/data). Prefer a single
-# gunicorn worker and a single replica; locks and lost writes are likely with more.
-_db_path = Path(os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'data' / 'db.sqlite3'))
-_db_path.parent.mkdir(parents=True, exist_ok=True)
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': _db_path,
-    }
+    # No credential defaults — missing POSTGRES_* must fail closed.
+    'default': postgres_database_from_env(allow_defaults=False),
 }
+require_postgresql(DATABASES)
 
 # Default: plain HTTP (local docker / direct port publish).
 # Behind a TLS-terminating proxy that *overwrites* X-Forwarded-Proto, set

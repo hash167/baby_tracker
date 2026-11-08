@@ -71,13 +71,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+#
+# PostgreSQL only. local/production set DATABASES via
+# config.settings.database.postgres_database_from_env() and call
+# require_postgresql(). SQLite is not supported.
 
 
 # Password validation
