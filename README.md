@@ -2,7 +2,7 @@
 
 Baby Tracker is a mobile-friendly web app for shared baby care. Parents and caregivers will use one site to record diapers and breastfeeding and to read a shared timeline. Accounts are planned to be invite-only, with an admin who invites people, changes roles, and deactivates accounts.
 
-The running code is the Django skeleton from [Django project skeleton, settings and container image](https://github.com/hash167/baby_tracker/issues/7), merged in [pull request #43](https://github.com/hash167/baby_tracker/pull/43), plus local PostgreSQL, pytest, and GitHub Actions CI. The app serves a home page and `/healthz`. Accounts, diaper logging, feeding timers, the shared timeline, CSV import, and deployment are still planned. They are specified in the epics below and are not part of the app you can run today.
+The running code is the Django skeleton from [Django project skeleton, settings and container image](https://github.com/hash167/baby_tracker/issues/7), merged in [pull request #43](https://github.com/hash167/baby_tracker/pull/43), plus local PostgreSQL, pytest, GitHub Actions CI, and baseline OpenTelemetry tracing with sensitive-data filtering ([issue #12](https://github.com/hash167/baby_tracker/issues/12)). The app serves a home page and `/healthz`. Accounts, diaper logging, feeding timers, the shared timeline, CSV import, and deployment are still planned. They are specified in the epics below and are not part of the app you can run today.
 
 ## What the app will do
 
@@ -53,6 +53,7 @@ Versions locked in [`uv.lock`](uv.lock) today:
 - gunicorn 26.2.0
 - WhiteNoise 6.12.0
 - psycopg 3.3.x
+- OpenTelemetry API/SDK 1.45.2, OTLP/HTTP exporter 1.45.2, and instrumentation 0.66b2 for Django, psycopg, urllib, and urllib3
 - django-debug-toolbar 8.0.0, pytest, pytest-django, factory-boy, and ruff in the `dev` group
 
 ## Run it locally
@@ -117,13 +118,28 @@ Set `DJANGO_BEHIND_PROXY=true` only when a TLS-terminating proxy overwrites `X-F
 
 Names and placeholders for these variables are in [`.env.example`](.env.example). Do not commit `.env`.
 
+## Telemetry
+
+Django requests, psycopg queries, and outbound HTTP made with `urllib` or `urllib3` produce OpenTelemetry spans. Nothing is exported until a collector address is set:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` (base URL; `/v1/traces` is appended)
+- or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (full traces URL)
+
+The app does not read `OTEL_EXPORTER_OTLP_HEADERS` and does not send a vendor API key. Honeycomb, dashboards, and the collector deployment are still planned in the deployment epic.
+
+Django span names are URLconf templates (`POST /events/{event_id}/`, `GET /healthz`). A request that does not match one of those patterns is named with the HTTP method only. Outbound HTTP has no route table in this app, so those spans are named with the method only and do not include the URL path. Database spans are named with the SQL operation (`SELECT`) and keep start and end timestamps. Query text and parameters are not exported.
+
+Exported attributes are an allowlist: HTTP method, status, a URLconf route template, `db.system`, `db.operation`, `error.type`, and `app.event_type` / `app.outcome` / `app.role` when the value is on a fixed list (`anonymous`, `admin`, `parent`, `caregiver` for role). `error.type` is kept only when it is the `__name__` of an exception class in the standard library, Django, psycopg, or urllib. Request and response bodies, form fields, query strings, cookies, auth headers, names, emails, notes, import contents, and client URL paths are not exported. The same filter drops them from span events, exception messages and stack traces, span links, status descriptions, and resource attributes. If redaction fails, the span is dropped instead of exported raw. A missing or unreachable collector does not fail the request.
+
+`record_functional_attributes` in `config.telemetry` is how later views can set event type, outcome, error class, and role. Values outside the allowlists are ignored. Accounts and the core models are separate work; this does not record a user id or a name.
+
 ## Planned hosting and operations
 
-None of this is configured in the repository.
+The hosting layout below is not configured in the repository.
 
 The intended layout is a single app container and a private PostgreSQL database on k3s. Public HTTPS is planned through an existing Cloudflare Tunnel. The planned address is `https://baby.thewalawalas.com`. That hostname is a target in the deployment epic. It was not checked as a live site while writing this file.
 
-OpenTelemetry is planned to export to Honeycomb, with alarms for sustained failures and a separate external availability check. Traces must leave out names, notes, feeding contents, and import contents. Dashboards, that external check, encrypted backups with a restore drill, and the launch checklist are tracked in [Epic: Deployment, observability & reliability](https://github.com/hash167/baby_tracker/issues/6).
+The app can export OTLP traces to a collector (see Telemetry above). Honeycomb, alarms for sustained failures, and a separate external availability check are not configured here. Dashboards, that external check, encrypted backups with a restore drill, and the launch checklist are tracked in [Epic: Deployment, observability & reliability](https://github.com/hash167/baby_tracker/issues/6).
 
 ## Tests
 
@@ -135,7 +151,7 @@ pytest and pytest-django run against PostgreSQL only (test DB created and destro
 uv run pytest
 ```
 
-[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories are in-memory until the core models in [issue #11](https://github.com/hash167/baby_tracker/issues/11) exist. Caregivers are Django users. Tests and factories use synthetic data only.
+[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories are in-memory until the core models in [issue #11](https://github.com/hash167/baby_tracker/issues/11) exist. Caregivers are Django users. [`tests/test_telemetry.py`](tests/test_telemetry.py) reads in-memory exported spans from a synthetic request, a psycopg query, and an outbound HTTP call. Tests and factories use synthetic data only.
 
 Playwright needs Node.js 22. It loads Django's admin login at `/admin/login/` (the product login page is still planned). Start PostgreSQL, migrate, and `runserver`, then:
 
