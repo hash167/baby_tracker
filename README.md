@@ -112,12 +112,3 @@ OpenTelemetry is planned to export to Honeycomb, with alarms for sustained failu
 The planned strategy is pytest and pytest-django against a real PostgreSQL database, plus Playwright driving the plain JavaScript UI. The important cases are timer correctness, permissions, concurrency (one active feed per baby, idempotent saves), and import correctness (validation, preview, and deduplication).
 
 That suite is not in the tree. [`pyproject.toml`](pyproject.toml) does not depend on pytest or Playwright. There is no `.github` workflow. [`tracker/tests.py`](tracker/tests.py) is Django's empty `TestCase` placeholder. The SQLite database used by the skeleton is not the planned PostgreSQL integration database.
-
-## Privacy
-
-This is a public repository.
-
-- Do not commit a real Nara Baby export, family records, real names, real accounts, real care entries, credentials, backups, or a runtime database.
-- Importer fixtures, when they are added, are synthetic only. Checking a real export is a private step and the file is not attached to issues or stored in git.
-- [`.gitignore`](.gitignore) ignores `.env` and other `.env.*` files except `.env.example`, SQLite database files, and `local_settings.py`. It does not ignore `*.csv`, so an export dropped in the tree would still be committable. Leave those files out.
-- [`.env.example`](.env.example) contains placeholders only, including `DJANGO_SECRET_KEY=change-me`.
