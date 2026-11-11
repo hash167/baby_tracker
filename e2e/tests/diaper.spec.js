@@ -12,8 +12,18 @@ test('diaper button is tappable and a failed save can be retried', async ({ page
   await wet.click();
   await expect(page.locator('#save-result')).toContainText('Saved');
 
-  await page.route('**/diapers/', (route) => route.abort());
-  await page.getByRole('button', { name: 'Dirty' }).click();
+  await page.evaluate(async () => {
+    if (!navigator.serviceWorker) return;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  });
+  await page.route('**/diapers/', (route) => {
+    if (route.request().method() === 'POST') {
+      return route.fulfill({ status: 500, contentType: 'text/plain', body: 'unavailable' });
+    }
+    return route.continue();
+  });
+  await page.getByRole('button', { name: 'Dirty' }).click({ noWaitAfter: true });
   await expect(page.locator('#save-banner')).toBeVisible();
   await expect(page.locator('#save-banner-text')).toHaveText('Not saved');
   await page.unroute('**/diapers/');

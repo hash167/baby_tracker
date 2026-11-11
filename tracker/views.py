@@ -1112,20 +1112,22 @@ const SHELL = [
   '/static/icons/icon-192.png',
 ];
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('shell-v1').then((cache) => cache.addAll(SHELL)));
+  event.waitUntil(caches.open('shell-v2').then((cache) => cache.addAll(SHELL)));
   self.skipWaiting();
 });
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((key) => key !== 'shell-v2').map((key) => caches.delete(key)))
+    ).then(() => self.clients.claim())
+  );
 });
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
   if (event.request.method !== 'GET') {
     return;
   }
-  const shell = SHELL.indexOf(url.pathname) !== -1;
-  if (!shell) {
-    event.respondWith(fetch(event.request));
+  const url = new URL(event.request.url);
+  if (SHELL.indexOf(url.pathname) === -1) {
     return;
   }
   event.respondWith(

@@ -48,6 +48,10 @@
     showUnsaved('Not saved');
   });
 
+  document.body.addEventListener('htmx:sendAbort', function () {
+    showUnsaved('Not saved');
+  });
+
   document.body.addEventListener('htmx:responseError', function (event) {
     var status = event.detail.xhr ? event.detail.xhr.status : 0;
     if (status === 401) {
