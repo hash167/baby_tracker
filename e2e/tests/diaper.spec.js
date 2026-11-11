@@ -27,6 +27,6 @@ test('diaper button is tappable and a failed save can be retried', async ({ page
   await expect(page.locator('#save-banner')).toBeVisible();
   await expect(page.locator('#save-banner-text')).toHaveText('Not saved');
   await page.unroute('**/diapers/');
-  await page.locator('#save-banner').getByRole('button', { name: 'Retry' }).click();
+  await page.locator('#save-banner').getByRole('button', { name: 'Retry' }).click({ noWaitAfter: true });
   await expect(page.locator('#save-result')).toContainText('Saved');
 });

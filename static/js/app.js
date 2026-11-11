@@ -65,11 +65,12 @@
 
   document.body.addEventListener('htmx:afterRequest', function (event) {
     if (!event.detail.successful) return;
-    var form = event.detail.elt && (event.detail.elt.closest('form') || event.detail.elt);
-    if (form && form.matches && form.matches('form[data-idempotent]')) {
-      var input = form.querySelector('input[name="idempotency_key"]');
-      if (input) input.value = '';
-    }
+    var elt = event.detail.elt;
+    var form = elt && elt.matches && elt.matches('form') ? elt : null;
+    if (!form && elt && elt.closest) form = elt.closest('form');
+    if (!form || !form.matches || !form.matches('form[data-idempotent]')) return;
+    var input = form.querySelector('input[name="idempotency_key"]');
+    if (input) input.value = '';
     if (banner) banner.hidden = true;
   });
 
