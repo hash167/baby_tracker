@@ -69,7 +69,7 @@ uv run python manage.py runserver
 
 `uv sync` installs the locked dependencies, including the `dev` group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. Local defaults match compose (`POSTGRES_HOST=127.0.0.1`, database/user/password `baby_tracker`). Copy [`.env.example`](.env.example) to `.env` only when you need overrides. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console. Compose publishes Postgres on `127.0.0.1:5432` only (not on all interfaces).
 
-`migrate` applies Django's built-in tables to PostgreSQL. The `tracker` app has no models yet.
+`migrate` applies Django's built-in tables and the tracker tables for households, baby profiles, shared events, and audit history.
 
 `psycopg` loads the system `libpq` shared library (there is no usable `psycopg-binary` wheel for Python 3.15 yet):
 
@@ -137,7 +137,7 @@ pytest and pytest-django run against PostgreSQL only (test DB created and destro
 uv run pytest
 ```
 
-[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories are in-memory until the core models in [issue #11](https://github.com/hash167/baby_tracker/issues/11) exist. Caregivers are Django users. Tests and factories use synthetic data only.
+[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories persist the tracker models. Caregivers are Django users. Tests and factories use synthetic data only.
 
 Playwright needs Node.js 22. It loads Django's admin login at `/admin/login/` (the product login page is still planned). Start PostgreSQL, migrate, and `runserver`, then:
 
