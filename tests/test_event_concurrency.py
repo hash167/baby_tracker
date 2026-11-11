@@ -50,7 +50,7 @@ def test_second_transaction_cannot_write_a_locked_stale_version():
                 cursor.execute("SET lock_timeout = '300ms'")
                 with pytest.raises(OperationalError, match='lock timeout'):
                     cursor.execute(
-                        f'UPDATE {Event._meta.db_table} '
+                        f'UPDATE {Event._meta.db_table} '  # nosec B608
                         'SET version = version + 1 '
                         'WHERE id = %s AND version = %s',
                         [event.pk, locked.version],
@@ -60,14 +60,14 @@ def test_second_transaction_cannot_write_a_locked_stale_version():
         other.rollback()
         with other.cursor() as cursor:
             cursor.execute(
-                f'UPDATE {Event._meta.db_table} '
+                f'UPDATE {Event._meta.db_table} '  # nosec B608
                 'SET version = version + 1 '
                 'WHERE id = %s AND version = 1',
                 [event.pk],
             )
             assert cursor.rowcount == 0
             cursor.execute(
-                f'SELECT version, occurred_at FROM {Event._meta.db_table} WHERE id = %s',
+                f'SELECT version, occurred_at FROM {Event._meta.db_table} WHERE id = %s',  # nosec B608
                 [event.pk],
             )
             version, occurred_at = cursor.fetchone()

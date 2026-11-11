@@ -14,12 +14,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 \
+    && apt-get install -y --no-install-recommends libpq5 postgresql-client openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Writable home outside the root-owned source tree (gunicorn writes ~/.gunicorn).
-RUN groupadd --system app \
-    && useradd --system --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
 
 # Dependency layer (cached until lock/project metadata change)
 COPY pyproject.toml uv.lock ./
@@ -35,9 +35,15 @@ RUN uv sync --frozen --no-dev \
     && chown -R app:app /app/staticfiles \
     && chmod +x /app/docker/entrypoint.sh /app/docker/migrate.py
 
-# Entrypoint starts as root, then drops to app before migrate/gunicorn.
+# Entrypoint starts as root, prepares data directories, then drops to app.
 # Runtime requires reachable PostgreSQL (POSTGRES_* env vars).
+# Run `python /app/docker/migrate.py` before serving traffic.
 EXPOSE 8000
 
+# Migrations are not run here. Use `python /app/docker/migrate.py` first.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"
+
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--no-control-socket"]
+# Access logs are off. A default access line would include invite tokens in the path.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--no-control-socket"]

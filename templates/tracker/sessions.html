@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Account · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Account</h1>
+  <p><a href="{% url 'password-change' %}">Change password</a></p>
+  <p><a href="{% url 'archive' %}">Archived import records</a></p>
+  <h2>Sessions</h2>
+  <ul>
+    {% for row in rows %}
+      <li>
+        {% if row.session_key == current %}This device{% else %}Other device{% endif %}
+        · {{ row.created_at|date:"N j, g:i A" }}
+      </li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{% url 'revoke-other-sessions' %}">
+    {% csrf_token %}
+    <button type="submit">Sign out other sessions</button>
+  </form>
+  <form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit" data-clear-cache>Log out</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load care %}
+
+{% block title %}Timeline · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card"
+         data-poll-ms="{{ poll_ms }}"
+         data-marker="{{ marker }}"
+         data-marker-url="{% url 'timeline-marker' %}"
+         data-partial-url="{% url 'timeline-partial' %}?day={{ day|date:'Y-m-d' }}{% if kind %}&amp;type={{ kind }}{% endif %}">
+  <div class="row spread">
+    <h1>Timeline</h1>
+    {% if babies|length > 1 %}
+      <form method="post" action="{% url 'select-baby' %}">
+        {% csrf_token %}
+        <label>Baby
+          <select name="baby_id">
+            {% for item in babies %}
+              <option value="{{ item.pk }}" {% if baby and item.pk == baby.pk %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit">Show</button>
+      </form>
+    {% elif baby %}
+      <p class="muted">{{ baby.name }}</p>
+    {% endif %}
+  </div>
+
+  <div class="summary" id="summary">
+    {% if active_feed %}
+      <p class="live">Active feed on the {{ active_side }} side.</p>
+    {% endif %}
+    <p>Last side: <strong>{{ last_side|default:"—" }}</strong></p>
+    <p>Since last feed started: {{ since_feed_start|ago }}</p>
+    <p>Since last feed ended: {{ since_feed_end|ago }}</p>
+    <p>Today, by start time: {{ today_feed_count }} feeds, left {{ today_left|duration }}, right {{ today_right|duration }}.</p>
+    <p>Since last diaper: {{ since_diaper|ago }}</p>
+    <p class="muted">Feeds that pass midnight stay on the day they started.</p>
+  </div>
+
+  <h2>Diaper</h2>
+  <form class="stack" method="post" action="{% url 'diaper-create' %}"
+        hx-post="{% url 'diaper-create' %}"
+        hx-target="#save-result"
+        hx-swap="innerHTML"
+        data-idempotent
+        hx-disabled-elt="button">
+    {% csrf_token %}
+    <input type="hidden" name="idempotency_key" value="">
+    <div class="actions">
+      <button type="submit" name="diaper_type" value="wet">Wet</button>
+      <button type="submit" name="diaper_type" value="dirty">Dirty</button>
+      <button type="submit" name="diaper_type" value="both">Both</button>
+      <button type="submit" name="diaper_type" value="dry">Dry</button>
+    </div>
+    <label>When (leave blank for now)
+      <input type="datetime-local" name="occurred_at">
+    </label>
+    <label>Notes
+      <textarea name="notes" maxlength="2000" rows="2"></textarea>
+    </label>
+  </form>
+  <div id="save-result"></div>
+
+  <div class="row spread day-nav">
+    <a href="{% url 'timeline-day' previous_day|date:'Y-m-d' %}{% if kind %}?type={{ kind }}{% endif %}">Previous day</a>
+    <h2>{{ day|date:"l, N j, Y" }}</h2>
+    <a href="{% url 'timeline-day' next_day|date:'Y-m-d' %}{% if kind %}?type={{ kind }}{% endif %}">Next day</a>
+  </div>
+  <p class="filters">
+    <a href="{% url 'timeline-day' day|date:'Y-m-d' %}">All</a>
+    <a href="{% url 'timeline-day' day|date:'Y-m-d' %}?type=diaper">Diapers</a>
+    <a href="{% url 'timeline-day' day|date:'Y-m-d' %}?type=feed">Feeds</a>
+  </p>
+  <p>Diapers this day: wet {{ diaper_counts.wet }}, dirty {{ diaper_counts.dirty }}, both {{ diaper_counts.both }}, dry {{ diaper_counts.dry }}.</p>
+  <div id="timeline">
+    {% include "tracker/timeline_partial.html" %}
+  </div>
+</section>
+{% endblock %}

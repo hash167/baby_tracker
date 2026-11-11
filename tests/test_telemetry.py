@@ -24,7 +24,7 @@ NOTE = 'SyntheticNoteAlpha9f3c'
 BABY = 'SyntheticBabyNameQq7'
 CAREGIVER = 'SyntheticCaregiverWw2'
 EMAIL = 'parent.synthetic@example.com'
-TOKEN = 'synthetic-bearer-token'
+TOKEN = 'synthetic-bearer-token'  # nosec B105
 COOKIE = 'synthetic-cookie-value'
 IMPORT_ROW = 'SyntheticImportCsvRow77'
 # Lowercase on purpose: a letter-only path segment is still a name or note.
@@ -389,7 +389,7 @@ def test_outbound_http_omits_lowercase_names_and_notes(exported_spans):
             },
             method='POST',
         )
-        with urllib.request.urlopen(request, timeout=2) as response:
+        with urllib.request.urlopen(request, timeout=2) as response:  # nosec B310
             assert response.status == 204
     finally:
         server.shutdown()

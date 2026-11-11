@@ -19,13 +19,14 @@ DATABASES = {
 }
 require_postgresql(DATABASES)
 
-INSTALLED_APPS += [
-    'debug_toolbar',
-]
-
-MIDDLEWARE += [
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
-]
+# Set DJANGO_DEBUG_TOOLBAR=0 for browser tests. The toolbar covers phone layouts.
+if os.environ.get('DJANGO_DEBUG_TOOLBAR', '1') != '0':
+    INSTALLED_APPS += [
+        'debug_toolbar',
+    ]
+    MIDDLEWARE += [
+        'debug_toolbar.middleware.DebugToolbarMiddleware',
+    ]
 
 INTERNAL_IPS = [
     '127.0.0.1',

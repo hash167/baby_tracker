@@ -40,6 +40,8 @@ EVENT_TYPES = frozenset(
         'import',
         'invite',
         'account',
+        'backup',
+        'heartbeat',
     }
 )
 OUTCOMES = frozenset(
@@ -48,6 +50,8 @@ OUTCOMES = frozenset(
         'failure',
         'client_error',
         'server_error',
+        'save_failed',
+        'conflict',
     }
 )
 ROLES = frozenset({'anonymous', 'admin', 'parent', 'caregiver'})
@@ -494,8 +498,11 @@ def _rename_client_span(span, method: str) -> None:
 
 def _route_for_request(request) -> str | None:
     path = getattr(request, 'path', '') or ''
-    if path.rstrip('/') == '/healthz':
+    bare = path.rstrip('/')
+    if bare == '/healthz':
         candidate = '/healthz'
+    elif bare == '/readyz':
+        candidate = '/readyz'
     else:
         match = getattr(request, 'resolver_match', None)
         route = getattr(match, 'route', None) if match is not None else None
@@ -755,18 +762,22 @@ def _load_error_classes() -> frozenset[str]:
         'urllib.error',
         'http.client',
     ):
+        imported = None
         try:
-            modules.append(importlib.import_module(module_name))
+            imported = importlib.import_module(module_name)
         except Exception:
-            continue
+            imported = None
+        if imported is not None:
+            modules.append(imported)
     for module in modules:
         for value in vars(module).values():
             if not isinstance(value, type):
                 continue
+            is_exception = False
             try:
                 is_exception = issubclass(value, BaseException)
             except TypeError:
-                continue
+                is_exception = False
             if is_exception and value.__name__:
                 names.add(value.__name__)
     return frozenset(names)

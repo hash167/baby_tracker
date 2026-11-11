@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Import · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Import</h1>
+  <p class="muted">Upload a Nara Baby CSV. Nothing is added to the timeline until you commit a preview.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="{% url 'import-upload' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label>CSV file
+      <input type="file" name="export" accept=".csv,text/csv" required>
+    </label>
+    <button type="submit">Stage preview</button>
+  </form>
+  <h2>Batches</h2>
+  <ul>
+    {% for batch in batches %}
+      <li><a href="{% url 'import-preview' batch.pk %}">{{ batch.status }}</a> · {{ batch.created_at|date:"N j, g:i A" }}</li>
+    {% empty %}
+      <li>No batches yet.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

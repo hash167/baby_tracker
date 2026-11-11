@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Archive · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Archive</h1>
+  <p class="muted">Sleep, growth, medical, and unrecognized import rows. There is no tracking screen for these in this version.</p>
+  <ul class="events">
+    {% for row in rows %}
+      <li>
+        <p><strong>{{ row.kind }}</strong> {{ row.occurred_at|date:"N j, Y, g:i A" }}</p>
+        {% if row.notes %}<p>{{ row.notes }}</p>{% endif %}
+        {% if row.archive %}<pre>{{ row.archive }}</pre>{% endif %}
+      </li>
+    {% empty %}
+      <li>No archived rows.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

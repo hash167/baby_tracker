@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load care %}
+
+{% block title %}Edit · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card narrow">
+  <h1>Edit entry</h1>
+  {% if conflict %}
+    <p class="error" role="alert">This entry changed. The current values are shown below. Save again if they are still right.</p>
+  {% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="version" value="{{ event.version }}">
+    <label>When
+      <input type="datetime-local" name="occurred_at" value="{{ event.occurred_at|date:'Y-m-d' }}T{{ event.occurred_at|date:'H:i' }}">
+    </label>
+    {% if event.kind == 'diaper' %}
+      <label>Type
+        <select name="diaper_type">
+          {% for value, label in event.DiaperType.choices %}
+            <option value="{{ value }}" {% if event.diaper_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endif %}
+    {% if event.kind == 'feed' %}
+      <label>Left minutes
+        <input name="left_minutes" inputmode="decimal" value="{{ event.left_seconds|minutes }}">
+      </label>
+      <label>Right minutes
+        <input name="right_minutes" inputmode="decimal" value="{{ event.right_seconds|minutes }}">
+      </label>
+    {% endif %}
+    <label>Notes
+      <textarea name="notes" maxlength="2000" rows="3">{{ event.notes }}</textarea>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+  {% if nav_membership.role == 'admin' or nav_membership.role == 'parent' %}
+    {% if event.deleted_at %}
+      <form method="post" action="{% url 'event-restore' event.pk %}">
+        {% csrf_token %}
+        <button type="submit">Restore</button>
+      </form>
+    {% endif %}
+  {% endif %}
+  <p><a href="{% url 'event-history' event.pk %}">History</a></p>
+</section>
+{% endblock %}

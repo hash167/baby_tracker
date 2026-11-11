@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}History · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>History</h1>
+  <ul class="events">
+    {% for entry in entries %}
+      <li>
+        <p><strong>{{ entry.action }}</strong> by {{ entry.actor.username }} at {{ entry.at|date:"N j, Y, g:i A" }}</p>
+        <ul>
+          {% for field, change in entry.changes.items %}
+            <li>{{ field }}: {{ change.before }} → {{ change.after }}</li>
+          {% endfor %}
+        </ul>
+      </li>
+    {% empty %}
+      <li>No history.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

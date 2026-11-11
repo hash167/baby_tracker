@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Manual feed · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card narrow">
+  <h1>Manual feed</h1>
+  <p class="muted">Enter 0 for a side that was not used. Blank is not the same as zero.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" data-idempotent>
+    {% csrf_token %}
+    <input type="hidden" name="idempotency_key" value="">
+    <label>Started
+      <input type="datetime-local" name="occurred_at">
+    </label>
+    <label>Left minutes
+      <input name="left_minutes" inputmode="decimal" required>
+    </label>
+    <label>Right minutes
+      <input name="right_minutes" inputmode="decimal" required>
+    </label>
+    <label>Start side
+      <select name="start_side">
+        <option value="">—</option>
+        <option value="left">Left</option>
+        <option value="right">Right</option>
+      </select>
+    </label>
+    <label>End side
+      <select name="end_side">
+        <option value="">—</option>
+        <option value="left">Left</option>
+        <option value="right">Right</option>
+      </select>
+    </label>
+    <label>Notes
+      <textarea name="notes" maxlength="2000" rows="2"></textarea>
+    </label>
+    <button type="submit">Save feed</button>
+  </form>
+</section>
+{% endblock %}

@@ -20,6 +20,11 @@ build/
 .coverage
 htmlcov/
 
+# Local upload and backup directories. Never commit these.
+data/imports/
+data/backups/
+*.sql.enc
+
 # Django
 *.log
 local_settings.py

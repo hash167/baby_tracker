@@ -412,10 +412,73 @@ class Event(AuditableModel):
         on_delete=models.PROTECT,
         related_name='events',
     )
+
+    class Kind(models.TextChoices):
+        EVENT = 'event', 'event'
+        DIAPER = 'diaper', 'diaper'
+        FEED = 'feed', 'feed'
+        SLEEP = 'sleep', 'sleep'
+        GROWTH = 'growth', 'growth'
+        MEDICAL = 'medical', 'medical'
+        UNKNOWN = 'unknown', 'unknown'
+
+    class DiaperType(models.TextChoices):
+        WET = 'wet', 'wet'
+        DIRTY = 'dirty', 'dirty'
+        BOTH = 'both', 'both'
+        DRY = 'dry', 'dry'
+
+    class FeedState(models.TextChoices):
+        ACTIVE = 'active', 'active'
+        PAUSED = 'paused', 'paused'
+        FINISHED = 'finished', 'finished'
+
+    class FeedSource(models.TextChoices):
+        TIMER = 'timer', 'timer'
+        MANUAL = 'manual', 'manual'
+        IMPORT = 'import', 'import'
+
+    class Side(models.TextChoices):
+        LEFT = 'left', 'left'
+        RIGHT = 'right', 'right'
+
     occurred_at = models.DateTimeField(validators=[validate_aware_datetime])
     recorded_at = models.DateTimeField(validators=[validate_aware_datetime])
     source_system = models.CharField(max_length=64, blank=True, default='')
     source_activity_id = models.CharField(max_length=128, blank=True, default='')
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.EVENT)
+    diaper_type = models.CharField(max_length=16, blank=True, default='')
+    notes = models.CharField(max_length=2000, blank=True, default='')
+    feed_state = models.CharField(max_length=16, blank=True, default='')
+    feed_source = models.CharField(max_length=16, blank=True, default='')
+    feed_ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        validators=[validate_aware_datetime],
+    )
+    left_seconds = models.IntegerField(null=True, blank=True)
+    right_seconds = models.IntegerField(null=True, blank=True)
+    start_side = models.CharField(max_length=8, blank=True, default='')
+    end_side = models.CharField(max_length=8, blank=True, default='')
+    totals_overridden = models.BooleanField(default=False)
+    attributed_name = models.CharField(max_length=200, blank=True, default='')
+    attributed_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='+',
+    )
+    import_batch = models.ForeignKey(
+        'tracker.ImportBatch',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='events',
+    )
+    import_fingerprint = models.CharField(max_length=64, blank=True, default='')
+    photo_names = models.JSONField(default=list, blank=True)
+    archive = models.JSONField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -430,6 +493,28 @@ class Event(AuditableModel):
                     models.Q(source_activity_id='') | ~models.Q(source_system='')
                 ),
                 name='event_source_system_set',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(left_seconds__isnull=True) | models.Q(left_seconds__gte=0)
+                ),
+                name='event_left_seconds_nonneg',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(right_seconds__isnull=True)
+                    | models.Q(right_seconds__gte=0)
+                ),
+                name='event_right_seconds_nonneg',
+            ),
+            models.UniqueConstraint(
+                fields=['baby'],
+                condition=models.Q(
+                    kind='feed',
+                    deleted_at__isnull=True,
+                    feed_state__in=['active', 'paused'],
+                ),
+                name='one_open_feed_per_baby',
             ),
         ]
         indexes = [
@@ -460,6 +545,13 @@ class Event(AuditableModel):
                 {'household': 'Baby belongs to a different household.'}
             )
         self.household_id = baby_household_id
+
+    def clean(self):
+        super().clean()
+        for field_name in ('left_seconds', 'right_seconds'):
+            value = getattr(self, field_name)
+            if value is not None and value < 0:
+                raise ValidationError({field_name: 'Duration cannot be negative.'})
 
 
 class AuditEntryQuerySet(models.QuerySet):
@@ -526,3 +618,8 @@ class AuditEntry(models.Model):
             at=dj_timezone.now(),
             changes=changes,
         )
+
+
+# Imported for Django model discovery. Lives at the bottom so Event and
+# AuditEntry exist before the related tables are defined.
+from tracker import extra_models as _extra_models  # noqa: E402, F401

@@ -17,6 +17,10 @@ SKIP_SNAPSHOT_FIELDS = frozenset({'updated_at'})
 def json_value(value):
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
+    if isinstance(value, dict):
+        return {str(key): json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_value(item) for item in value]
     if isinstance(value, datetime):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError('naive datetime cannot be stored in an audit payload')

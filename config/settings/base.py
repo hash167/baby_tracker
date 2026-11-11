@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -45,6 +46,7 @@ MIDDLEWARE = [
     'django_htmx.middleware.HtmxMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'tracker.middleware.HouseholdMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -61,6 +63,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'tracker.context.shell',
             ],
         },
     },
@@ -119,3 +122,28 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/timeline/'
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+
+EVENT_FUTURE_TOLERANCE_SECONDS = int(
+    os.environ.get('EVENT_FUTURE_TOLERANCE_SECONDS', '120')
+)
+TIMELINE_POLL_MS = int(os.environ.get('TIMELINE_POLL_MS', '5000'))
+LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', '5'))
+LOGIN_WINDOW_SECONDS = int(os.environ.get('LOGIN_WINDOW_SECONDS', '900'))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get('LOGIN_LOCKOUT_SECONDS', '900'))
+INVITE_TTL_HOURS = int(os.environ.get('INVITE_TTL_HOURS', '72'))
+IMPORT_RETENTION_DAYS = int(os.environ.get('IMPORT_RETENTION_DAYS', '14'))
+IMPORT_ROOT = Path(os.environ.get('IMPORT_ROOT', BASE_DIR / 'data' / 'imports'))
+IMPORT_MAX_BYTES = int(os.environ.get('IMPORT_MAX_BYTES', '5000000'))
+READY_TIMEOUT_SECONDS = float(os.environ.get('READY_TIMEOUT_SECONDS', '2'))
+BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', BASE_DIR / 'data' / 'backups'))

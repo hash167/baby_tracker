@@ -346,22 +346,20 @@ def test_database_rejects_a_duplicate_import_reference():
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    INSERT INTO {table} (
-                        id, version, created_at, updated_at, deleted_at,
-                        created_by_id, updated_by_id, household_id, baby_id,
-                        occurred_at, recorded_at, source_system, source_activity_id
-                    )
-                    SELECT gen_random_uuid(), version, created_at, updated_at,
-                           deleted_at, created_by_id, updated_by_id,
-                           household_id, baby_id, occurred_at, recorded_at,
-                           source_system, source_activity_id
-                    FROM {table}
-                    WHERE id = %s
-                    """,
-                    [event.pk],
+                statement = (
+                    'INSERT INTO '  # nosec B608
+                    + table
+                    + ' (id, version, created_at, updated_at, deleted_at,'  # nosec B608
+                    ' created_by_id, updated_by_id, household_id, baby_id,'
+                    ' occurred_at, recorded_at, source_system, source_activity_id)'
+                    ' SELECT gen_random_uuid(), version, created_at, updated_at,'
+                    ' deleted_at, created_by_id, updated_by_id,'
+                    ' household_id, baby_id, occurred_at, recorded_at,'
+                    ' source_system, source_activity_id FROM '
+                    + table
+                    + ' WHERE id = %s'
                 )
+                cursor.execute(statement, [event.pk])
     assert Event.objects.filter(source_activity_id='activity-db').count() == 1
 
 
@@ -373,7 +371,7 @@ def test_version_check_constraint_rejects_zero():
         with transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f'UPDATE {table} SET version = 0 WHERE id = %s',
+                    f'UPDATE {table} SET version = 0 WHERE id = %s',  # nosec B608
                     [household.pk],
                 )
     assert Household.objects.get(pk=household.pk).version == 1
@@ -408,15 +406,12 @@ def test_audit_payload_is_queryable_in_the_database_and_not_logged(caplog):
 
     table = AuditEntry._meta.db_table
     with connection.cursor() as cursor:
-        cursor.execute(
-            f"""
-            SELECT changes #>> '{{name,after}}',
-                   jsonb_typeof(changes)
-            FROM {table}
-            WHERE object_id = %s AND action = 'create'
-            """,
-            [str(household.pk)],
+        statement = (
+            "SELECT changes #>> '{name,after}', jsonb_typeof(changes) FROM "  # nosec B608
+            + table
+            + " WHERE object_id = %s AND action = 'create'"
         )
+        cursor.execute(statement, [str(household.pk)])
         after, kind = cursor.fetchone()
     assert after == MARKER
     assert kind == 'object'

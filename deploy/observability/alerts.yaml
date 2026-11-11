@@ -1,0 +1,39 @@
+# Sustained-failure triggers. Apply these in Honeycomb with a key that is not
+# stored in this repository. A single sample over the line does not fire.
+destination: baby-tracker-otel secret, notification channel configured in Honeycomb
+rules:
+  http_5xx_ratio:
+    description: HTTP 5xx ratio by route template
+    window_seconds: 300
+    threshold: 0.05
+    minimum_samples: 3
+  db_errors:
+    description: Database error spans
+    window_seconds: 300
+    threshold: 1
+    minimum_samples: 3
+  save_failures:
+    description: diaper or feed save_failed outcomes
+    window_seconds: 600
+    threshold: 1
+    minimum_samples: 3
+  import_failures:
+    description: import outcome failure
+    window_seconds: 900
+    threshold: 1
+    minimum_samples: 1
+  backup_missing:
+    description: no successful backup span
+    window_seconds: 93600
+    threshold: 1
+    minimum_samples: 1
+heartbeat:
+  command: python manage.py emit_heartbeat
+  schedule: "*/5 * * * *"
+  missing_alert: no heartbeat span for 15 minutes
+uptime:
+  url: https://baby.thewalawalas.com/healthz
+  login_url: https://baby.thewalawalas.com/login/
+  interval_seconds: 60
+  failure_threshold: 3
+  note: Run this check from outside the cluster. The health body is the text ok.

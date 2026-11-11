@@ -3,12 +3,38 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="theme-color" content="#1f6f6a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>{% block title %}Baby Tracker{% endblock %}</title>
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <link rel="icon" href="{% static 'icons/icon-192.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <script src="{% static 'js/htmx.min.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
 </head>
-<body hx-boost="true">
-  {% block content %}{% endblock %}
+<body>
+  <header class="top">
+    <a class="brand" href="{% url 'timeline' %}">Baby Tracker</a>
+    {% if nav_membership %}
+      <nav class="nav">
+        <a href="{% url 'timeline' %}">Timeline</a>
+        <a href="{% url 'feed' %}">Feed</a>
+        {% if can_import %}<a href="{% url 'import-home' %}">Import</a>{% endif %}
+        {% if can_admin_portal %}<a href="{% url 'portal' %}">Admin</a>{% endif %}
+        <a href="{% url 'session-list' %}">Account</a>
+      </nav>
+    {% endif %}
+  </header>
+  <div id="save-banner" class="banner" hidden>
+    <p id="save-banner-text">Not saved</p>
+    <button type="button" data-retry>Retry</button>
+  </div>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>

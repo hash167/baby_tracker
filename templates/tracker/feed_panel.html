@@ -1,0 +1,75 @@
+<div id="feed-panel" data-feed-state data-state-url="{% url 'feed-state' %}">
+  <p id="feed-status">
+    {% if session %}
+      {{ session.feed_state }}{% if payload.side %} · {{ payload.side }}{% endif %}
+    {% else %}
+      No active feed.
+    {% endif %}
+  </p>
+  <p>Left <strong id="feed-left">{{ payload.left_seconds }}</strong>s · Right <strong id="feed-right">{{ payload.right_seconds }}</strong>s</p>
+  <div class="actions">
+    {% if not session or session.feed_state == 'finished' %}
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="start">
+        <input type="hidden" name="side" value="left">
+        <button type="submit">Start left</button>
+      </form>
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="start">
+        <input type="hidden" name="side" value="right">
+        <button type="submit">Start right</button>
+      </form>
+    {% elif session.feed_state == 'active' %}
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="pause">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Pause</button>
+      </form>
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="switch">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Switch side</button>
+      </form>
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="finish">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Finish</button>
+      </form>
+    {% elif session.feed_state == 'paused' %}
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="resume">
+        <input type="hidden" name="side" value="left">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Resume left</button>
+      </form>
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="resume">
+        <input type="hidden" name="side" value="right">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Resume right</button>
+      </form>
+      <form method="post" action="{% url 'feed-act' %}" hx-post="{% url 'feed-act' %}" hx-target="#feed-panel" hx-swap="outerHTML" data-idempotent data-feed-action>
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="">
+        <input type="hidden" name="action" value="finish">
+        <input type="hidden" name="version" value="{{ session.version }}">
+        <button type="submit">Finish</button>
+      </form>
+    {% endif %}
+  </div>
+  <p id="feed-error" class="error" hidden></p>
+</div>

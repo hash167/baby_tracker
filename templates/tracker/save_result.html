@@ -1,0 +1,6 @@
+{% if saved %}
+  <p class="ok" role="status" data-event-id="{{ event.pk }}">Saved{% if replay %} (already recorded){% endif %}.</p>
+{% else %}
+  <p class="error" role="alert">{{ error|default:"Not saved" }}</p>
+  <button type="button" data-retry>Retry</button>
+{% endif %}

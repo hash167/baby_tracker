@@ -1,6 +1,6 @@
 # Required status checks: CI / lint, CI / pytest, CI / migrations, CI / playwright.
 # Security jobs below also fail this workflow: dependency-audit, bandit,
-# deploy-check, and secrets. Branch protection is a repository setting and is
+# deploy-check, secrets, manifests, and image. Branch protection is a repository setting and is
 # not configured here.
 # Credentials match docker-compose.yml. They are local/dev values, not production secrets.
 name: CI
@@ -152,9 +152,13 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Migrate and start the app
+      - name: Migrate, seed, and start the app
+        env:
+          TIMELINE_POLL_MS: "1000"
+          DJANGO_DEBUG_TOOLBAR: "0"
         run: |
           uv run python manage.py migrate --noinput
+          uv run python manage.py seed_e2e
           uv run python manage.py runserver 127.0.0.1:8000 --noreload > /tmp/runserver.log 2>&1 &
           for _ in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/healthz >/dev/null; then
@@ -246,3 +250,25 @@ jobs:
         run: python3 scripts/forbid_data_files.py --all
       - name: Pre-commit hooks
         run: uvx pre-commit==4.7.0 run --all-files
+
+  manifests:
+    name: manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kubeconform /usr/local/bin/kubeconform
+      - name: Lint Kubernetes manifests
+        run: kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas deploy/k8s/*.yaml
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build -t baby-tracker:ci .

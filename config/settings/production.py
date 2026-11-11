@@ -41,7 +41,7 @@ if _behind_proxy:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_REDIRECT_EXEMPT = [r'^healthz$']
+    SECURE_REDIRECT_EXEMPT = [r'^healthz$', r'^readyz$']
     # Required for `check --deploy` once TLS terminates in front of gunicorn.
     # The public hostname, CSRF_TRUSTED_ORIGINS, and CSP stay with issue #36.
     SECURE_HSTS_SECONDS = 31536000
@@ -51,3 +51,11 @@ else:
     SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+
+MIDDLEWARE += ['config.middleware.ContentSecurityPolicyMiddleware']

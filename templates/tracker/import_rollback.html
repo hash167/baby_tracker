@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Roll back import · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Roll back</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    {% if edited %}
+      <p>These records were edited after import. Choose what to do.</p>
+      <ul>
+        {% for event in edited %}
+          <li>
+            {{ event.kind }} {{ event.occurred_at|date:"N j, g:i A" }}
+            <label><input type="radio" name="choice-{{ event.pk }}" value="keep" required> Keep edited</label>
+            <label><input type="radio" name="choice-{{ event.pk }}" value="remove"> Remove</label>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Unedited records from this batch will be removed or reverted. Other entries stay.</p>
+    {% endif %}
+    <button type="submit">Roll back</button>
+  </form>
+</section>
+{% endblock %}
