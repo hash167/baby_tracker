@@ -20,6 +20,7 @@ metadata:
   name: baby-tracker
   namespace: baby-tracker
 spec:
+  # Uploaded CSVs are rows in PostgreSQL (ImportFile). No imports volume.
   replicas: 2
   selector:
     matchLabels:
