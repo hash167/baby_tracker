@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('tracker', '0002_care_import_access'),
     ]
@@ -14,9 +13,24 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='ImportFile',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                (
+                    'id',
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name='ID',
+                    ),
+                ),
                 ('content', models.BinaryField()),
-                ('batch', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='upload', to='tracker.importbatch')),
+                (
+                    'batch',
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name='upload',
+                        to='tracker.importbatch',
+                    ),
+                ),
             ],
         ),
     ]
