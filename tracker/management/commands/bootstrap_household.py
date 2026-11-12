@@ -1,6 +1,8 @@
 """Create the first household from environment variables.
 
-Refuses to run when any value is missing. Does not invent a password.
+The first run requires every value and does not invent a password.
+A later run exits 0 when a household or that admin already exists.
+It does not change an existing password or any other stored row.
 """
 
 import os
@@ -25,26 +27,39 @@ class Command(BaseCommand):
     help = 'Create the first admin, household, and baby from the environment.'
 
     def handle(self, *args, **options):
+        user_model = get_user_model()
+        if Household.objects.exists():
+            self.stdout.write(
+                'Household already exists. The password was left unchanged.'
+            )
+            return
+        username = os.environ.get('BOOTSTRAP_ADMIN_USERNAME', '')
+        if username and user_model.objects.filter(username=username).exists():
+            self.stdout.write('Admin already exists. The password was left unchanged.')
+            return
         missing = [name for name in REQUIRED if not os.environ.get(name)]
         if missing:
             raise CommandError('Missing ' + ', '.join(missing))
-        user_model = get_user_model()
-        username = os.environ['BOOTSTRAP_ADMIN_USERNAME']
-        if user_model.objects.filter(username=username).exists():
-            raise CommandError('That username already exists.')
+        values = {name: os.environ[name] for name in REQUIRED}
+        placeholders = [name for name, value in values.items() if 'REPLACE_' in value]
+        if placeholders:
+            raise CommandError(
+                'Replace placeholder bootstrap values before the first run: '
+                + ', '.join(placeholders)
+            )
         user = user_model.objects.create_user(
-            username=username,
-            email=os.environ['BOOTSTRAP_ADMIN_EMAIL'],
-            password=os.environ['BOOTSTRAP_ADMIN_PASSWORD'],
+            username=values['BOOTSTRAP_ADMIN_USERNAME'],
+            email=values['BOOTSTRAP_ADMIN_EMAIL'],
+            password=values['BOOTSTRAP_ADMIN_PASSWORD'],
         )
         household = Household(
-            name=os.environ['BOOTSTRAP_HOUSEHOLD_NAME'],
-            timezone=os.environ['BOOTSTRAP_TIMEZONE'],
+            name=values['BOOTSTRAP_HOUSEHOLD_NAME'],
+            timezone=values['BOOTSTRAP_TIMEZONE'],
         )
         household.save(actor=user)
         baby = BabyProfile(
             household=household,
-            name=os.environ['BOOTSTRAP_BABY_NAME'],
+            name=values['BOOTSTRAP_BABY_NAME'],
         )
         baby.save(actor=user)
         membership = Membership(

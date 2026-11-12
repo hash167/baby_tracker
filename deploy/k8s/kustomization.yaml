@@ -7,8 +7,9 @@ resources:
   - postgres.yaml
   - app.yaml
   - migrate-job.yaml
-  - bootstrap-job.yaml
   - backup-cronjob.yaml
+# bootstrap-job.yaml is a one-off. Apply it by itself after migrate.
+# It is not part of this kustomization, so a redeploy does not rerun it.
 # otel-collector.yaml is optional. Apply it only when Secret baby-tracker-otel
 # exists. The app runs with tracing export off when OTEL_EXPORTER_OTLP_ENDPOINT
 # is unset.

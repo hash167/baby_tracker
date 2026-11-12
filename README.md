@@ -44,7 +44,7 @@ docker compose up --build
 
 That starts PostgreSQL 16, runs migrations as their own step, then serves the app at `http://127.0.0.1:8000`. The compose database name, user, and password are the local development values `baby_tracker`. They are not production credentials.
 
-Create the first household when you are ready. The command exits if any value is missing:
+Create the first household when you are ready. The first run exits if any value is missing. A later run exits 0 when a household or that admin already exists and does not change the existing password:
 
 ```bash
 export BOOTSTRAP_ADMIN_USERNAME=...
@@ -118,7 +118,7 @@ The image runs gunicorn and WhiteNoise. It does not migrate on startup and it do
 python /app/docker/migrate.py
 ```
 
-Kubernetes manifests are in [`deploy/k8s/`](deploy/k8s/). They create the `baby-tracker` namespace, a private PostgreSQL 16 StatefulSet, the app Deployment and NodePort Service, a migration Job, a bootstrap Job, and a backup CronJob. The collector manifest is optional. Secrets are referenced by name (`baby-tracker-app`, `baby-tracker-db`, `baby-tracker-backup`, `baby-tracker-bootstrap`, and `baby-tracker-otel` only if you run the collector). The manifests do not contain secret values. Probes use `/readyz` for readiness and `/healthz` for liveness and do not set a Host header. A database outage removes the pod from the Service without a restart loop. Building the image and importing it into k3s with no registry is described in [docs/runbooks/deploy-k3s.md](docs/runbooks/deploy-k3s.md).
+Kubernetes manifests are in [`deploy/k8s/`](deploy/k8s/). They create the `baby-tracker` namespace, a private PostgreSQL 16 StatefulSet, the app Deployment and NodePort Service, a migration Job, and a backup CronJob. The bootstrap Job is a separate one-off (`deploy/k8s/bootstrap-job.yaml`), not part of that kustomization. Node addresses are a separate overlay at [`deploy/overlays/nodeport/`](deploy/overlays/nodeport/). The collector manifest is optional. Secrets are referenced by name (`baby-tracker-app`, `baby-tracker-db`, `baby-tracker-backup`, `baby-tracker-bootstrap` for the bootstrap password only, and `baby-tracker-otel` only if you run the collector). The manifests do not contain secret values. Probes use `/readyz` for readiness and `/healthz` for liveness and do not set a Host header. A database outage removes the pod from the Service without a restart loop. Building the image and importing it into k3s with no registry is described in [docs/runbooks/deploy-k3s.md](docs/runbooks/deploy-k3s.md).
 
 GitHub Actions builds the image on every pull request. A push to `main` publishes `ghcr.io/hash167/baby_tracker:<commit sha>`. The cluster pulls that image. GitHub does not receive a kubeconfig. See [docs/decisions/0002-image-delivery.md](docs/decisions/0002-image-delivery.md) and [docs/runbooks/rollback.md](docs/runbooks/rollback.md).
 

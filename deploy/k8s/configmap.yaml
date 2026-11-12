@@ -5,7 +5,7 @@ metadata:
   namespace: baby-tracker
 data:
   # Service DNS names, localhost, and the public hostname. Node names and
-  # NodePort origins belong in deploy/k8s/overlays/nodeport (placeholders only).
+  # NodePort origins belong in deploy/overlays/nodeport (placeholders only).
   DJANGO_ALLOWED_HOSTS: baby.thewalawalas.com,localhost,127.0.0.1,baby-tracker,baby-tracker.baby-tracker.svc,baby-tracker.baby-tracker.svc.cluster.local
   DJANGO_CSRF_TRUSTED_ORIGINS: https://baby.thewalawalas.com
   DJANGO_BEHIND_PROXY: "true"

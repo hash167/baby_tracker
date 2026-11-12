@@ -1,6 +1,20 @@
-# One-shot first household. Every value comes from the Secret
-# baby-tracker-bootstrap. Do not put names, emails, or passwords in this file.
-# Run after baby-tracker-migrate. Re-running fails if that username exists.
+# One-off first household. Not part of deploy/k8s/kustomization.yaml.
+# Edit the placeholders below before the first apply. Do not commit real values.
+# The password stays in Secret baby-tracker-bootstrap (key BOOTSTRAP_ADMIN_PASSWORD).
+# A later apply exits 0 when the household or that admin already exists and
+# does not change the existing password.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baby-tracker-bootstrap
+  namespace: baby-tracker
+data:
+  BOOTSTRAP_ADMIN_USERNAME: REPLACE_USERNAME
+  BOOTSTRAP_ADMIN_EMAIL: REPLACE_EMAIL@example.com
+  BOOTSTRAP_HOUSEHOLD_NAME: REPLACE_HOUSEHOLD
+  BOOTSTRAP_BABY_NAME: REPLACE_BABY
+  BOOTSTRAP_TIMEZONE: America/Los_Angeles
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -46,34 +60,34 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: BOOTSTRAP_ADMIN_USERNAME
               valueFrom:
-                secretKeyRef:
+                configMapKeyRef:
                   name: baby-tracker-bootstrap
                   key: BOOTSTRAP_ADMIN_USERNAME
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: baby-tracker-bootstrap
+                  key: BOOTSTRAP_ADMIN_EMAIL
+            - name: BOOTSTRAP_HOUSEHOLD_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: baby-tracker-bootstrap
+                  key: BOOTSTRAP_HOUSEHOLD_NAME
+            - name: BOOTSTRAP_BABY_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: baby-tracker-bootstrap
+                  key: BOOTSTRAP_BABY_NAME
+            - name: BOOTSTRAP_TIMEZONE
+              valueFrom:
+                configMapKeyRef:
+                  name: baby-tracker-bootstrap
+                  key: BOOTSTRAP_TIMEZONE
             - name: BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: baby-tracker-bootstrap
                   key: BOOTSTRAP_ADMIN_PASSWORD
-            - name: BOOTSTRAP_ADMIN_EMAIL
-              valueFrom:
-                secretKeyRef:
-                  name: baby-tracker-bootstrap
-                  key: BOOTSTRAP_ADMIN_EMAIL
-            - name: BOOTSTRAP_HOUSEHOLD_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: baby-tracker-bootstrap
-                  key: BOOTSTRAP_HOUSEHOLD_NAME
-            - name: BOOTSTRAP_BABY_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: baby-tracker-bootstrap
-                  key: BOOTSTRAP_BABY_NAME
-            - name: BOOTSTRAP_TIMEZONE
-              valueFrom:
-                secretKeyRef:
-                  name: baby-tracker-bootstrap
-                  key: BOOTSTRAP_TIMEZONE
           resources:
             requests:
               cpu: 50m

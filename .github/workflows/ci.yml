@@ -263,10 +263,30 @@ jobs:
           sudo mv kubeconform /usr/local/bin/kubeconform
       - name: Lint Kubernetes manifests
         run: |
-          find deploy/k8s -name '*.yaml' \
+          find deploy/k8s deploy/overlays -name '*.yaml' \
             ! -name 'kustomization.yaml' \
-            ! -path '*/overlays/*' \
             -print0 | xargs -0 kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas
+      - name: Install kubectl
+        run: |
+          curl -sL -o kubectl "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          kubectl version --client
+      - name: Render base and nodeport overlay
+        run: |
+          kubectl kustomize deploy/k8s > /tmp/base.yaml
+          kubectl kustomize deploy/overlays/nodeport > /tmp/nodeport.yaml
+          kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas /tmp/base.yaml /tmp/nodeport.yaml
+          python3 - <<'PY'
+          from pathlib import Path
+          base = Path('/tmp/base.yaml').read_text()
+          overlay = Path('/tmp/nodeport.yaml').read_text()
+          if 'name: baby-tracker-bootstrap' in base:
+              raise SystemExit('bootstrap Job must stay out of the base kustomization')
+          if 'NODE1' not in overlay:
+              raise SystemExit('nodeport overlay did not patch allowed hosts')
+          if 'baby-tracker.baby-tracker.svc.cluster.local' not in overlay:
+              raise SystemExit('nodeport overlay dropped the service DNS name')
+          PY
 
   image:
     name: image

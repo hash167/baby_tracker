@@ -33,23 +33,33 @@ Create the Secrets first. The manifests only name them.
 - `baby-tracker-app`: `DJANGO_SECRET_KEY`
 - `baby-tracker-db`: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 - `baby-tracker-backup`: `BACKUP_ENCRYPTION_KEY`
-- `baby-tracker-bootstrap`: `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_HOUSEHOLD_NAME`, `BOOTSTRAP_BABY_NAME`, `BOOTSTRAP_TIMEZONE`
+- `baby-tracker-bootstrap`: `BOOTSTRAP_ADMIN_PASSWORD` only
+
+`kubectl apply -k deploy/k8s` does not create the bootstrap Job. A redeploy does not need the username, email, household, or baby keys in that Secret.
 
 ```bash
 kubectl apply -k deploy/k8s
 kubectl -n baby-tracker delete job baby-tracker-migrate --ignore-not-found
 kubectl apply -f deploy/k8s/migrate-job.yaml
 kubectl -n baby-tracker wait --for=condition=complete job/baby-tracker-migrate
-kubectl apply -f deploy/k8s/bootstrap-job.yaml
 ```
 
-The app Service is a NodePort on 30820. The base ConfigMap allows the public hostname, localhost, and the in-cluster Service DNS names. For browser access through a node address, copy `deploy/k8s/overlays/nodeport/configmap-hosts.yaml`, replace `NODE1`, `NODE2`, and `NODE3`, and apply that overlay instead:
+The first household is a separate one-off. Edit the placeholders in `deploy/k8s/bootstrap-job.yaml` (username, email, household name, baby name, timezone). Those values are a ConfigMap. The password stays in the Secret. Then:
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/nodeport
+kubectl apply -f deploy/k8s/bootstrap-job.yaml
+kubectl -n baby-tracker wait --for=condition=complete job/baby-tracker-bootstrap
 ```
 
-Do not commit those addresses.
+Do not commit the edited names. Running the command again exits 0 when a household or that admin already exists, and it does not change the existing password. To apply the Job a second time, delete it first (`kubectl -n baby-tracker delete job baby-tracker-bootstrap`).
+
+The app Service is a NodePort on 30820. The base ConfigMap allows the public hostname, localhost, and the in-cluster Service DNS names. For browser access through a node address, copy `deploy/overlays/nodeport/configmap-hosts.yaml`, replace `NODE1`, `NODE2`, and `NODE3`, and apply that overlay instead of the base:
+
+```bash
+kubectl apply -k deploy/overlays/nodeport
+```
+
+The overlay lives outside `deploy/k8s` so `kubectl kustomize` does not report a cycle. Do not commit those addresses.
 
 `/healthz` and `/readyz` answer before host checks, including when kubelet sends the pod IP as `Host`. Probes do not set a Host header.
 

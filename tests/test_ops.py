@@ -211,3 +211,34 @@ def test_manifests_have_no_secret_values():
     assert 'baby-tracker.baby-tracker.svc.cluster.local' in config
     assert '100.67.' not in config
     assert 'OTEL_EXPORTER_OTLP_ENDPOINT' not in config
+    kustomization = (ROOT / 'deploy' / 'k8s' / 'kustomization.yaml').read_text()
+    assert '- bootstrap-job.yaml' not in kustomization
+    overlay_dir = ROOT / 'deploy' / 'overlays' / 'nodeport'
+    overlay = (overlay_dir / 'kustomization.yaml').read_text()
+    assert '../../k8s' in overlay
+    assert not (ROOT / 'deploy' / 'k8s' / 'overlays').exists()
+    bootstrap = (ROOT / 'deploy' / 'k8s' / 'bootstrap-job.yaml').read_text()
+    assert 'kind: ConfigMap' in bootstrap
+    assert 'configMapKeyRef' in bootstrap
+    for key in (
+        'BOOTSTRAP_ADMIN_USERNAME',
+        'BOOTSTRAP_ADMIN_EMAIL',
+        'BOOTSTRAP_HOUSEHOLD_NAME',
+        'BOOTSTRAP_BABY_NAME',
+        'BOOTSTRAP_TIMEZONE',
+    ):
+        assert f'key: {key}' in bootstrap
+    lines = bootstrap.splitlines()
+    secret_windows = [
+        '\n'.join(lines[index : index + 4])
+        for index, line in enumerate(lines)
+        if line.strip() == 'secretKeyRef:'
+    ]
+    bootstrap_secrets = [
+        window for window in secret_windows if 'name: baby-tracker-bootstrap' in window
+    ]
+    assert bootstrap_secrets == [
+        next(
+            window for window in secret_windows if 'BOOTSTRAP_ADMIN_PASSWORD' in window
+        )
+    ]
