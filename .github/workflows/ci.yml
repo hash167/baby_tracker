@@ -262,13 +262,49 @@ jobs:
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
           sudo mv kubeconform /usr/local/bin/kubeconform
       - name: Lint Kubernetes manifests
-        run: kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas deploy/k8s/*.yaml
+        run: |
+          find deploy/k8s -name '*.yaml' \
+            ! -name 'kustomization.yaml' \
+            ! -path '*/overlays/*' \
+            -print0 | xargs -0 kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas
 
   image:
     name: image
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: baby_tracker
+          POSTGRES_USER: baby_tracker
+          POSTGRES_PASSWORD: baby_tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baby_tracker -d baby_tracker"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - name: Build the production image
         run: docker build -t baby-tracker:ci .
+      - name: Check pg_dump major
+        run: |
+          version="$(docker run --rm --entrypoint pg_dump baby-tracker:ci --version)"
+          echo "$version"
+          printf '%s' "$version" | python3 -c 'import re,sys; text=sys.stdin.read(); match=re.search(r"PostgreSQL\)\s+(\d+)", text); major=int(match.group(1)) if match else 0; sys.exit(0 if major >= 16 else f"pg_dump major {major} cannot dump PostgreSQL 16")'
+      - name: Migrate the way the Kubernetes Job does
+        run: |
+          docker run --rm --network host \
+            -e PYTHONPATH=/tmp/not-the-app \
+            -e DJANGO_SECRET_KEY=ci-not-a-production-secret \
+            -e DJANGO_ALLOWED_HOSTS=localhost \
+            -e POSTGRES_HOST=127.0.0.1 \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=baby_tracker \
+            -e POSTGRES_USER=baby_tracker \
+            -e POSTGRES_PASSWORD=baby_tracker \
+            --entrypoint python \
+            baby-tracker:ci /app/docker/migrate.py

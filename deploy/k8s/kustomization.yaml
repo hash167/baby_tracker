@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - networkpolicy.yaml
+  - postgres.yaml
+  - app.yaml
+  - migrate-job.yaml
+  - bootstrap-job.yaml
+  - backup-cronjob.yaml
+# otel-collector.yaml is optional. Apply it only when Secret baby-tracker-otel
+# exists. The app runs with tracing export off when OTEL_EXPORTER_OTLP_ENDPOINT
+# is unset.

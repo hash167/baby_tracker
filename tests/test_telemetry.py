@@ -621,13 +621,11 @@ def test_setup_failure_is_contained(monkeypatch):
     assert setup_telemetry() is False
 
 
-def test_healthz_span_is_a_fixed_route(client, exported_spans):
-    response = client.get('/healthz')
+def test_healthz_is_answered_before_tracing(client, exported_spans):
+    """Probes return before OpenTelemetry, which would reject a pod-IP Host."""
+    response = client.get('/healthz', HTTP_HOST='10.9.8.7')
     assert response.status_code == 200
+    assert response.content == b'ok'
     spans = exported_spans.get_finished_spans()
-    health = [span for span in spans if span.attributes.get('http.route') == '/healthz']
-    assert len(health) == 1
-    assert health[0].name == 'GET /healthz'
-    assert health[0].attributes['http.response.status_code'] == 200
-    assert health[0].attributes['app.role'] == 'anonymous'
-    assert health[0].attributes['app.outcome'] == 'success'
+    assert '10.9.8.7' not in _span_text(spans)
+    assert not any(span.attributes.get('http.route') == '/healthz' for span in spans)

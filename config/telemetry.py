@@ -415,9 +415,21 @@ def _instrument() -> None:
 
     django = DjangoInstrumentor()
     if not django.is_instrumented_by_opentelemetry:
+        # HealthzMiddleware must stay first. This instrumentor inserts itself
+        # at position 0 by default and then calls request.build_absolute_uri(),
+        # which rejects a kubelet Host (the pod IP) before the probe middleware
+        # can answer. Place it immediately after the probe middleware.
+        from django.conf import settings
+
+        probe = 'config.middleware.HealthzMiddleware'
+        try:
+            after_probe = list(settings.MIDDLEWARE).index(probe) + 1
+        except ValueError:
+            after_probe = 0
         django.instrument(
             is_sql_commentor_enabled=False,
             response_hook=_django_response_hook,
+            middleware_position=after_probe,
         )
     psycopg = PsycopgInstrumentor()
     if not psycopg.is_instrumented_by_opentelemetry:

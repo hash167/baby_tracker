@@ -9,12 +9,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app \
     DJANGO_SETTINGS_MODULE=config.settings.production
 
 WORKDIR /app
 
+# Bookworm's postgresql-client is 15. pg_dump 15 cannot dump a PostgreSQL 16 server.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 postgresql-client openssl \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 postgresql-client-16 openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Writable home outside the root-owned source tree (gunicorn writes ~/.gunicorn).

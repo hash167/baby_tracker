@@ -358,10 +358,46 @@ def test_commit_failure_leaves_no_rows_and_files_expire(monkeypatch):
         uploaded=upload,
         text=FIXTURE.read_text(),
     )
+    from tracker.extra_models import ImportFile
+    from tracker.nara import stored_bytes
+
+    assert stored_bytes(stored) == FIXTURE.read_bytes()
+    assert ImportFile.objects.filter(batch=stored).exists()
     stored.purge_after = timezone.now() - timedelta(days=1)
     stored.save(actor=actor, expected_version=stored.version)
     assert purge_expired() == 1
     stored.refresh_from_db()
     assert stored.stored_name == ''
     assert stored.purged_at is not None
+    assert stored_bytes(stored) is None
+    assert not ImportFile.objects.filter(batch=stored).exists()
     assert ImportRow.objects.filter(batch=stored).exists()
+
+
+def test_original_csv_downloads_from_postgres(client):
+    household, baby, actor = make_household()
+    parent, _membership = add_member(household, Role.PARENT, actor=actor)
+    upload = SimpleUploadedFile(
+        'synthetic.csv', FIXTURE.read_bytes(), content_type='text/csv'
+    )
+    stored = stage_upload(
+        actor=parent,
+        household=household,
+        baby=baby,
+        uploaded=upload,
+        text=FIXTURE.read_text(),
+    )
+    from tracker.models import AuditEntry
+
+    for changes in AuditEntry.objects.values_list('changes', flat=True):
+        assert 'content' not in changes
+    login(client, parent)
+    response = client.get(f'/import/{stored.pk}/file/')
+    assert response.status_code == 200
+    assert response['Cache-Control'] == 'no-store'
+    assert response.content == FIXTURE.read_bytes()
+    stored.purge_after = timezone.now() - timedelta(days=1)
+    stored.save(actor=parent, expected_version=stored.version)
+    assert purge_expired() == 1
+    missing = client.get(f'/import/{stored.pk}/file/')
+    assert missing.status_code == 404

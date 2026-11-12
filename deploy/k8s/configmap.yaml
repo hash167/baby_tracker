@@ -4,15 +4,15 @@ metadata:
   name: baby-tracker-config
   namespace: baby-tracker
 data:
-  DJANGO_ALLOWED_HOSTS: baby.thewalawalas.com
+  # Service DNS names, localhost, and the public hostname. Node names and
+  # NodePort origins belong in deploy/k8s/overlays/nodeport (placeholders only).
+  DJANGO_ALLOWED_HOSTS: baby.thewalawalas.com,localhost,127.0.0.1,baby-tracker,baby-tracker.baby-tracker.svc,baby-tracker.baby-tracker.svc.cluster.local
   DJANGO_CSRF_TRUSTED_ORIGINS: https://baby.thewalawalas.com
   DJANGO_BEHIND_PROXY: "true"
   DJANGO_SETTINGS_MODULE: config.settings.production
   POSTGRES_HOST: postgres
   POSTGRES_PORT: "5432"
   POSTGRES_DB: baby_tracker
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-  IMPORT_ROOT: /var/lib/baby-tracker/imports
   IMPORT_RETENTION_DAYS: "14"
   BACKUP_DIR: /var/lib/baby-tracker/backups
   BACKUP_RETENTION_DAYS: "14"

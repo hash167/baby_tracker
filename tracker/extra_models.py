@@ -221,6 +221,24 @@ class ImportBatch(AuditableModel):
         return f'ImportBatch {self.pk}'
 
 
+class ImportFile(models.Model):
+    """Original CSV bytes in PostgreSQL.
+
+    Not audited: a snapshot would copy the file into audit JSON. Any app
+    replica can read this row, so uploads do not need a node-local volume.
+    """
+
+    batch = models.OneToOneField(
+        ImportBatch,
+        on_delete=models.CASCADE,
+        related_name='upload',
+    )
+    content = models.BinaryField()
+
+    def __str__(self):
+        return f'ImportFile {self.batch_id}'
+
+
 class ImportRow(models.Model):
     """One parsed CSV row. `raw` and `mapped` stay in the database."""
 

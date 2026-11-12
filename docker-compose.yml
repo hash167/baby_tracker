@@ -46,7 +46,6 @@ services:
       POSTGRES_DB: baby_tracker
       POSTGRES_USER: baby_tracker
       POSTGRES_PASSWORD: baby_tracker
-      IMPORT_ROOT: /var/lib/baby-tracker/imports
       BACKUP_DIR: /var/lib/baby-tracker/backups
     depends_on:
       migrate:

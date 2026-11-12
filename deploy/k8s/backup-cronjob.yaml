@@ -1,3 +1,6 @@
+# local-path (the cluster default) is ReadWriteOnce and node-affine.
+# The CronJob runs on the node that already holds this volume. Do not add a
+# nodeSelector or a node affinity that excludes other nodes.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,7 +18,9 @@ metadata:
   name: baby-tracker-backup
   namespace: baby-tracker
 spec:
+  # 03:30 in America/Los_Angeles, not UTC.
   schedule: "30 3 * * *"
+  timeZone: America/Los_Angeles
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

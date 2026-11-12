@@ -1,8 +1,8 @@
 # Observability
 
-The app exports OTLP/HTTP to `OTEL_EXPORTER_OTLP_ENDPOINT` (in cluster, `http://otel-collector:4318`). It does not send a Honeycomb API key.
+Tracing export is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set. An unset endpoint does not crash the process. The base ConfigMap leaves it unset. The app does not read a Honeycomb API key.
 
-The collector manifest is `deploy/k8s/otel-collector.yaml`. The key is `baby-tracker-otel` / `HONEYCOMB_API_KEY`. The collector keeps only the attribute allowlist in `deploy/otel/collector.yaml`, batches spans, and retries exports. If the collector is down, the app's exporter fails the span and the HTTP request still completes.
+Apply `deploy/k8s/otel-collector.yaml` only when Secret `baby-tracker-otel` (`HONEYCOMB_API_KEY`) exists, and then set `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` on the app. The collector keeps the attribute allowlist in `deploy/otel/collector.yaml`, batches spans, and retries exports. If the collector is down, the app's exporter drops the span and the HTTP request still completes.
 
 `deploy/observability/alerts.yaml` lists the sustained triggers: 5xx ratio, database errors, save failures, import failures, and a missing backup. A single sample over the line does not fire. Alert text should stay limited to route templates, error classes, and counts.
 

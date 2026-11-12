@@ -11,10 +11,8 @@ import hashlib
 import io
 import json
 import logging
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -444,45 +442,40 @@ def fingerprint(mapped: dict) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def import_root() -> Path:
-    return Path(settings.IMPORT_ROOT)
+def _read_upload(uploaded) -> bytes:
+    return b''.join(uploaded.chunks())
 
 
-def store_upload(household, uploaded) -> str:
-    root = import_root()
-    folder = root / str(household.pk)
-    folder.mkdir(parents=True, exist_ok=True)
-    name = f'{uuid.uuid4().hex}.csv'
-    dest = folder / name
-    with dest.open('wb') as handle:
-        for chunk in uploaded.chunks():
-            handle.write(chunk)
-    dest.chmod(0o600)
-    return name
+def stored_bytes(batch) -> bytes | None:
+    """CSV bytes from PostgreSQL, or None after retention purge."""
+    from tracker.extra_models import ImportFile
 
-
-def stored_path(batch) -> Path | None:
     if not batch.stored_name:
         return None
-    root = import_root().resolve()
-    path = (root / str(batch.household_id) / batch.stored_name).resolve()
-    if not path.is_relative_to(root):
+    row = ImportFile.objects.filter(batch=batch).only('content').first()
+    if row is None:
         return None
-    return path
+    content = row.content
+    if isinstance(content, memoryview):
+        return content.tobytes()
+    return bytes(content)
 
 
 def stage_upload(*, actor, household, baby, uploaded, text: str, now=None):
+    from tracker.extra_models import ImportFile
+
     now = now or dj_timezone.now()
-    stored_name = store_upload(household, uploaded)
+    content = _read_upload(uploaded)
     batch = ImportBatch(
         household=household,
         baby=baby,
         status=ImportBatch.Status.STAGED,
         original_name=(uploaded.name or '')[:255],
-        stored_name=stored_name,
+        stored_name='postgres',
         purge_after=now + timedelta(days=settings.IMPORT_RETENTION_DAYS),
     )
     batch.save(actor=actor)
+    ImportFile.objects.create(batch=batch, content=content)
     _fill_rows(batch, text)
     return batch
 
@@ -801,15 +794,15 @@ def _revert_update(event, link, actor):
 
 
 def purge_expired(*, now=None) -> int:
+    from tracker.extra_models import ImportFile
+
     now = now or dj_timezone.now()
     removed = 0
     batches = ImportBatch.all_objects.filter(purge_after__lt=now).exclude(
         stored_name=''
     )
     for batch in batches:
-        path = stored_path(batch)
-        if path is not None and path.exists():
-            path.unlink()
+        ImportFile.objects.filter(batch=batch).delete()
         batch.stored_name = ''
         batch.purged_at = now
         batch.save(actor=batch.updated_by, expected_version=batch.version)

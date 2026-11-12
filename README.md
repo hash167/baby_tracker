@@ -28,7 +28,7 @@ While the timeline tab is visible it polls for changes from other devices and re
 
 ## Nara Baby import
 
-**Import** accepts a CSV shaped like a Nara Baby export. The file is stored outside the public site and removed after the retention period. Staging does not change the timeline. The preview groups rows by type and lists warnings: timestamp mismatches, unknown values, missing units, and duplicate ids in the file. Caregiver names in the file can be mapped to someone who already has an account, or left as attribution text. The import does not create accounts.
+**Import** accepts a CSV shaped like a Nara Baby export. The original file is stored in PostgreSQL and removed after the retention period, so any app replica can download it. Staging does not change the timeline. The preview groups rows by type and lists warnings: timestamp mismatches, unknown values, missing units, and duplicate ids in the file. Caregiver names in the file can be mapped to someone who already has an account, or left as attribution text. The import does not create accounts.
 
 Committing writes diapers and finished feeds, including per-side totals and the start and end side. It does not invent a left/right switch sequence. Sleep, growth, and medical rows are kept and listed under **Account → Archived import records**. A second import of the same file adds nothing. A changed row is applied only when you choose **Apply update**. **Roll back** removes that batch. If someone edited an imported row afterward, the rollback asks whether to keep or remove that edit. Other entries are left alone.
 
@@ -118,7 +118,7 @@ The image runs gunicorn and WhiteNoise. It does not migrate on startup and it do
 python /app/docker/migrate.py
 ```
 
-Kubernetes manifests are in [`deploy/k8s/`](deploy/k8s/). They create the `baby-tracker` namespace, a private PostgreSQL StatefulSet, the app Deployment and Service, a migration Job, a backup CronJob, and an OpenTelemetry Collector. Secrets are referenced by name (`baby-tracker-app`, `baby-tracker-db`, `baby-tracker-backup`, `baby-tracker-otel`). The manifests do not contain secret values. Probes use `/readyz` for readiness and `/healthz` for liveness, so a database outage removes the pod from the Service without a restart loop.
+Kubernetes manifests are in [`deploy/k8s/`](deploy/k8s/). They create the `baby-tracker` namespace, a private PostgreSQL 16 StatefulSet, the app Deployment and NodePort Service, a migration Job, a bootstrap Job, and a backup CronJob. The collector manifest is optional. Secrets are referenced by name (`baby-tracker-app`, `baby-tracker-db`, `baby-tracker-backup`, `baby-tracker-bootstrap`, and `baby-tracker-otel` only if you run the collector). The manifests do not contain secret values. Probes use `/readyz` for readiness and `/healthz` for liveness and do not set a Host header. A database outage removes the pod from the Service without a restart loop. Building the image and importing it into k3s with no registry is described in [docs/runbooks/deploy-k3s.md](docs/runbooks/deploy-k3s.md).
 
 GitHub Actions builds the image on every pull request. A push to `main` publishes `ghcr.io/hash167/baby_tracker:<commit sha>`. The cluster pulls that image. GitHub does not receive a kubeconfig. See [docs/decisions/0002-image-delivery.md](docs/decisions/0002-image-delivery.md) and [docs/runbooks/rollback.md](docs/runbooks/rollback.md).
 

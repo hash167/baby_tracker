@@ -1,0 +1,10 @@
+# Extra Host and CSRF entries for NodePort. Replace NODE1, NODE2, and NODE3
+# with node names or addresses before applying. Do not commit real addresses.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: baby-tracker-config
+  namespace: baby-tracker
+data:
+  DJANGO_ALLOWED_HOSTS: baby.thewalawalas.com,localhost,127.0.0.1,baby-tracker,baby-tracker.baby-tracker.svc,baby-tracker.baby-tracker.svc.cluster.local,NODE1,NODE2,NODE3
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://baby.thewalawalas.com,http://NODE1:30820,http://NODE2:30820,http://NODE3:30820

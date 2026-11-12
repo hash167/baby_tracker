@@ -4,7 +4,7 @@ metadata:
   name: baby-tracker
   namespace: baby-tracker
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app.kubernetes.io/name: baby-tracker
     app.kubernetes.io/component: app
@@ -12,6 +12,7 @@ spec:
     - name: http
       port: 8000
       targetPort: http
+      nodePort: 30820
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,6 +33,26 @@ spec:
     spec:
       securityContext:
         fsGroup: 10001
+      # Prefer different nodes. ScheduleAnyway so two replicas still start
+      # when the cluster has fewer than two ready nodes.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: baby-tracker
+                    app.kubernetes.io/component: app
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: baby-tracker
+              app.kubernetes.io/component: app
       containers:
         - name: app
           image: ghcr.io/hash167/baby_tracker:REPLACE_SHA
@@ -84,21 +105,3 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 3
-          volumeMounts:
-            - name: imports
-              mountPath: /var/lib/baby-tracker/imports
-      volumes:
-        - name: imports
-          persistentVolumeClaim:
-            claimName: baby-tracker-imports
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: baby-tracker-imports
-  namespace: baby-tracker
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: 1Gi

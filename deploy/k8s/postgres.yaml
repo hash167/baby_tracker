@@ -1,3 +1,7 @@
+# The PVC uses the cluster default StorageClass. On this k3s cluster that is
+# local-path, which binds the volume to one node. The StatefulSet pod then
+# stays on that node for the life of the volume. Do not add a nodeSelector;
+# the volume's node affinity is the pin.
 apiVersion: v1
 kind: Service
 metadata:

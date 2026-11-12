@@ -7,9 +7,25 @@ Ciphertext is AES-256-CBC via openssl. A backup cannot be read without the key.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 from pathlib import Path
+
+_PG_DUMP_VERSION = re.compile(r'PostgreSQL\)\s+(\d+)')
+
+
+def pg_dump_major(version_text: str) -> int:
+    """Major version from `pg_dump --version` (for example `pg_dump (PostgreSQL) 16.1`)."""
+    match = _PG_DUMP_VERSION.search(version_text)
+    if match is None:
+        raise ValueError('unrecognized pg_dump version')
+    return int(match.group(1))
+
+
+def client_can_dump_server(client_major: int, server_major: int) -> bool:
+    """pg_dump refuses to dump a newer server major."""
+    return client_major >= server_major
 
 
 def _openssl(args: list[str], payload: bytes, key: str) -> bytes:

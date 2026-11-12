@@ -57,6 +57,19 @@ def test_foreign_host_is_rejected(client):
     assert response.status_code == 400
 
 
+def test_probes_answer_for_a_pod_ip_host(client):
+    """Kubelet sends the pod IP as Host. OpenTelemetry must not reject that first."""
+    from django.conf import settings
+
+    assert settings.MIDDLEWARE[0] == 'config.middleware.HealthzMiddleware'
+    health = client.get('/healthz', HTTP_HOST='10.1.2.3')
+    assert health.status_code == 200
+    assert health.content == b'ok'
+    ready = client.get('/readyz', HTTP_HOST='10.1.2.3')
+    assert ready.status_code == 200
+    assert ready.content == b'ok'
+
+
 def test_content_security_policy_header():
     def app(_request):
         from django.http import HttpResponse
@@ -89,6 +102,45 @@ def test_alert_window_ignores_a_single_blip():
         )
         is True
     )
+
+
+def test_pg_dump_must_be_at_least_the_server_major():
+    from tracker.backup import client_can_dump_server, pg_dump_major
+
+    assert pg_dump_major('pg_dump (PostgreSQL) 16.11') == 16
+    assert pg_dump_major('pg_dump (PostgreSQL) 15.19') == 15
+    assert client_can_dump_server(16, 16) is True
+    assert client_can_dump_server(16, 15) is True
+    assert client_can_dump_server(15, 16) is False
+
+
+def test_migrate_script_finds_config_when_run_by_path(tmp_path):
+    """The Job runs `python /app/docker/migrate.py`, not `python -m`."""
+    import os
+    import subprocess  # nosec B404
+    import sys
+
+    env = os.environ.copy()
+    env.pop('PYTHONPATH', None)
+    env['DJANGO_SETTINGS_MODULE'] = 'config.settings.production'
+    env['DJANGO_SECRET_KEY'] = 'deploy-check-placeholder-not-a-secret'  # nosec B105
+    env['DJANGO_ALLOWED_HOSTS'] = 'localhost'
+    env.setdefault('POSTGRES_HOST', '127.0.0.1')
+    env.setdefault('POSTGRES_PORT', '5432')
+    env.setdefault('POSTGRES_DB', 'baby_tracker')
+    env.setdefault('POSTGRES_USER', 'baby_tracker')
+    env.setdefault('POSTGRES_PASSWORD', 'baby_tracker')
+    script = ROOT / 'docker' / 'migrate.py'
+    result = subprocess.run(  # nosec B603
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'No module named' not in result.stderr + result.stdout
 
 
 def test_backup_ciphertext_needs_the_key():
@@ -143,5 +195,19 @@ def test_manifests_have_no_secret_values():
     app = (ROOT / 'deploy' / 'k8s' / 'app.yaml').read_text()
     assert 'path: /readyz' in app
     assert 'path: /healthz' in app
+    assert 'nodePort: 30820' in app
+    assert 'nodeSelector' not in app
+    assert 'baby-tracker-imports' not in app
+    assert 'emptyDir' not in app
+    assert 'maxSkew: 1' in app
+    assert 'ScheduleAnyway' in app
+    assert 'weight: 100' in app
     assert 'REPLACE_SHA' in app
     assert 'baby-tracker-db' in app
+    postgres = (ROOT / 'deploy' / 'k8s' / 'postgres.yaml').read_text()
+    assert 'postgres:16' in postgres
+    assert 'postgres:15' not in postgres
+    config = (ROOT / 'deploy' / 'k8s' / 'configmap.yaml').read_text()
+    assert 'baby-tracker.baby-tracker.svc.cluster.local' in config
+    assert '100.67.' not in config
+    assert 'OTEL_EXPORTER_OTLP_ENDPOINT' not in config

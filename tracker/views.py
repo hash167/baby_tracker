@@ -10,7 +10,6 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import (
-    FileResponse,
     Http404,
     HttpResponse,
     HttpResponseForbidden,
@@ -58,7 +57,7 @@ from tracker.nara import (
     set_decisions,
     set_name_map,
     stage_upload,
-    stored_path,
+    stored_bytes,
 )
 from tracker.policy import (
     ARCHIVED_KINDS,
@@ -976,10 +975,13 @@ def import_file(request, batch_id):
     ).first()
     if batch is None:
         raise Http404()
-    path = stored_path(batch)
-    if path is None or not path.exists():
+    payload = stored_bytes(batch)
+    if payload is None:
         raise Http404()
-    return FileResponse(path.open('rb'), content_type='text/csv')
+    response = HttpResponse(payload, content_type='text/csv')
+    response['Content-Disposition'] = 'attachment'
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @require_http_methods(['GET', 'POST'])

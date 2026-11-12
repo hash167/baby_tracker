@@ -10,9 +10,10 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connection
 
 from config.telemetry import record_functional_attributes
-from tracker.backup import encrypt, purge_old
+from tracker.backup import client_can_dump_server, encrypt, pg_dump_major, purge_old
 
 
 class Command(BaseCommand):
@@ -40,6 +41,28 @@ class Command(BaseCommand):
         if pg_dump is None:
             record_functional_attributes(event_type='backup', outcome='failure')
             raise CommandError('pg_dump is not installed')
+        version = subprocess.run(  # nosec B603
+            [pg_dump, '--version'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if version.returncode != 0:
+            record_functional_attributes(event_type='backup', outcome='failure')
+            raise CommandError('pg_dump --version failed')
+        with connection.cursor() as cursor:
+            cursor.execute('SHOW server_version_num')
+            server_major = int(cursor.fetchone()[0]) // 10000
+        try:
+            client_major = pg_dump_major(version.stdout)
+        except ValueError as exc:
+            record_functional_attributes(event_type='backup', outcome='failure')
+            raise CommandError('pg_dump version is unrecognized') from exc
+        if not client_can_dump_server(client_major, server_major):
+            record_functional_attributes(event_type='backup', outcome='failure')
+            raise CommandError(
+                f'pg_dump {client_major} cannot dump PostgreSQL {server_major}'
+            )
         dump = subprocess.run(  # nosec B603
             [pg_dump, '--format=custom', '--no-owner'],
             capture_output=True,
