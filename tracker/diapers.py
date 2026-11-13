@@ -16,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 DIAPER_TYPES = {choice for choice, _label in Event.DiaperType.choices}
 
+# Text is the label. The mark is a second cue so the type is not color alone.
+DIAPER_LABELS = {
+    'wet': 'Wet',
+    'dirty': 'Dirty',
+    'both': 'Wet + dirty',
+    'dry': 'Dry',
+}
+DIAPER_MARKS = {
+    'wet': '●',
+    'dirty': '■',
+    'both': '◆',
+    'dry': '○',
+}
+
 
 def create_diaper(
     *,

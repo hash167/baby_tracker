@@ -1,17 +1,30 @@
 {% extends "base.html" %}
+{% load care %}
 
 {% block title %}History · Baby Tracker{% endblock %}
 
 {% block content %}
 <section class="card">
   <h1>History</h1>
+  {% if event.kind == 'diaper' and event.diaper_type %}
+    <p class="event-title">
+      <strong class="diaper-type diaper-{{ event.diaper_type }}">
+        <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
+        <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
+      </strong>
+    </p>
+  {% endif %}
   <ul class="events">
     {% for entry in entries %}
       <li>
         <p><strong>{{ entry.action }}</strong> by {{ entry.actor.username }} at {{ entry.at|date:"N j, Y, g:i A" }}</p>
         <ul>
           {% for field, change in entry.changes.items %}
-            <li>{{ field }}: {{ change.before }} → {{ change.after }}</li>
+            {% if field == 'diaper_type' %}
+              <li>Type: {{ change.before|diaper_label }} → {{ change.after|diaper_label }}</li>
+            {% else %}
+              <li>{{ field }}: {{ change.before }} → {{ change.after }}</li>
+            {% endif %}
           {% endfor %}
         </ul>
       </li>

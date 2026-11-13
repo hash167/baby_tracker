@@ -1,6 +1,28 @@
 from django import template
 
+from tracker.diapers import DIAPER_LABELS, DIAPER_MARKS
+
 register = template.Library()
+
+
+@register.filter
+def diaper_label(value):
+    if value is None or value == '':
+        return ''
+    return DIAPER_LABELS.get(str(value), str(value))
+
+
+@register.filter
+def diaper_mark(value):
+    return DIAPER_MARKS.get(str(value or ''), '')
+
+
+@register.simple_tag
+def diaper_choices():
+    return [
+        {'value': key, 'label': label, 'mark': DIAPER_MARKS[key]}
+        for key, label in DIAPER_LABELS.items()
+    ]
 
 
 @register.filter

@@ -69,13 +69,17 @@ from tracker.policy import (
     can_restore_event,
 )
 from tracker.summary import (
+    RANGE_LABELS,
+    RANGE_LINKS,
     change_marker,
     day_feed_totals,
     diaper_counts,
+    events_in_range,
     events_on_day,
     last_side_used,
     latest_diaper,
     latest_feed,
+    range_summary,
     time_since,
 )
 
@@ -277,6 +281,47 @@ def _day_from(request, day_text=None):
     return timezone.now().astimezone(zone).date()
 
 
+def _range_key(request) -> str:
+    key = request.GET.get('range') or '24h'
+    if key not in RANGE_LABELS:
+        return '24h'
+    return key
+
+
+def _range_context(request, key):
+    baby = _baby(request)
+    now = timezone.now()
+    events = list(events_in_range(baby, key, now=now)) if baby else []
+    active = open_feed(baby) if baby else None
+    last_diaper = latest_diaper(baby) if baby else None
+    last_feed = latest_feed(baby) if baby else None
+    return {
+        'range_mode': True,
+        'range_key': key,
+        'range_label': RANGE_LABELS[key],
+        'range_choices': RANGE_LINKS,
+        'baby': baby,
+        'babies': list(request.household.babies.all()),
+        'events': events,
+        'summary': range_summary(events),
+        'active_feed': active,
+        'active_side': current_side(active) if active else '',
+        'last_side': last_side_used(baby) if baby else '',
+        'since_diaper': time_since(last_diaper.occurred_at, now=now)
+        if last_diaper
+        else None,
+        'since_feed_start': time_since(last_feed.occurred_at, now=now)
+        if last_feed
+        else None,
+        'since_feed_end': (
+            time_since(last_feed.feed_ended_at, now=now)
+            if last_feed and last_feed.feed_ended_at
+            else None
+        ),
+        'marker': change_marker(baby) if baby else '0',
+    }
+
+
 def _timeline_context(request, day):
     baby = _baby(request)
     kind = request.GET.get('type') or ''
@@ -322,11 +367,18 @@ def timeline(request, day=None):
     denied = _require(request)
     if denied:
         return denied
+    if day is None:
+        return render(
+            request,
+            'tracker/timeline.html',
+            _range_context(request, _range_key(request)),
+        )
     try:
         selected = _day_from(request, day)
     except Http404:
         raise
     context = _timeline_context(request, selected)
+    context['range_mode'] = False
     return render(request, 'tracker/timeline.html', context)
 
 
@@ -336,6 +388,12 @@ def timeline_partial(request):
     if denied:
         return denied
     day_text = request.GET.get('day')
+    if not day_text:
+        return render(
+            request,
+            'tracker/range_panel.html',
+            _range_context(request, _range_key(request)),
+        )
     try:
         selected = _day_from(request, day_text)
     except Http404:

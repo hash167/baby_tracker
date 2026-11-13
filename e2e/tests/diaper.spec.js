@@ -30,3 +30,24 @@ test('diaper button is tappable and a failed save can be retried', async ({ page
   await page.locator('#save-banner').getByRole('button', { name: 'Retry' }).click({ noWaitAfter: true });
   await expect(page.locator('#save-result')).toContainText('Saved');
 });
+
+test('wet and dirty diapers show their labels on the timeline', async ({ page }) => {
+  await login(page, 'synth_parent');
+  const timeline = page.locator('#timeline');
+
+  await page.getByRole('button', { name: 'Wet' }).click();
+  await expect(page.locator('#save-result')).toContainText('Saved');
+  const wet = timeline.locator('.diaper-label', { hasText: /^Wet$/ });
+  await expect(wet.first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Dirty' }).click();
+  await expect(page.locator('#save-result')).toContainText('Saved');
+  const dirty = timeline.locator('.diaper-label', { hasText: /^Dirty$/ });
+  await expect(dirty.first()).toBeVisible();
+  await expect(wet.first()).toBeVisible();
+
+  const badge = timeline.locator('.diaper-type', { hasText: 'Wet' }).first();
+  const box = await badge.boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(28);
+  expect(box.width).toBeGreaterThanOrEqual(44);
+});

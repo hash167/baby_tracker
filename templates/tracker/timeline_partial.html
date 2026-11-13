@@ -2,10 +2,16 @@
 <ul class="events">
   {% for event in events %}
     <li>
-      <p>
-        <strong>{{ event.get_kind_display }}</strong>
-        {{ event.occurred_at|date:"g:i A" }}
-        {% if event.kind == 'diaper' %} · {{ event.get_diaper_type_display }}{% endif %}
+      <p class="event-title">
+        {% if event.kind == 'diaper' and event.diaper_type %}
+          <strong class="diaper-type diaper-{{ event.diaper_type }}">
+            <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
+            <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
+          </strong>
+        {% else %}
+          <strong>{{ event.get_kind_display }}</strong>
+        {% endif %}
+        <span class="event-time">{{ event.occurred_at|date:"g:i A" }}</span>
         {% if event.kind == 'feed' %}
           · L {{ event.left_seconds|duration }} · R {{ event.right_seconds|duration }}
           {% if event.end_side %} · ended {{ event.end_side }}{% endif %}

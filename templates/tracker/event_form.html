@@ -17,10 +17,17 @@
       <input type="datetime-local" name="occurred_at" value="{{ event.occurred_at|date:'Y-m-d' }}T{{ event.occurred_at|date:'H:i' }}">
     </label>
     {% if event.kind == 'diaper' %}
+      <p class="event-title">
+        <strong class="diaper-type diaper-{{ event.diaper_type }}">
+          <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
+          <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
+        </strong>
+      </p>
       <label>Type
         <select name="diaper_type">
-          {% for value, label in event.DiaperType.choices %}
-            <option value="{{ value }}" {% if event.diaper_type == value %}selected{% endif %}>{{ label }}</option>
+          {% diaper_choices as types %}
+          {% for item in types %}
+            <option value="{{ item.value }}" {% if event.diaper_type == item.value %}selected{% endif %}>{{ item.label }}</option>
           {% endfor %}
         </select>
       </label>

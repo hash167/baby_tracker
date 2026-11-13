@@ -94,11 +94,23 @@
     pollTimer = null;
   }
 
+  function partialUrl() {
+    var root = pollRoot();
+    if (!root) return '';
+    var selected = document.querySelector('#range-panel [data-range]');
+    var base = root.getAttribute('data-range-url');
+    if (selected && base) {
+      return base + '?range=' + encodeURIComponent(selected.getAttribute('data-range'));
+    }
+    return root.getAttribute('data-partial-url');
+  }
+
   function refreshPartial() {
     var root = pollRoot();
     if (!root || !window.htmx) return;
-    htmx.ajax('GET', root.getAttribute('data-partial-url'), {
-      target: '#timeline',
+    var panel = document.getElementById('range-panel');
+    htmx.ajax('GET', partialUrl(), {
+      target: panel ? '#range-panel' : '#timeline',
       swap: 'innerHTML',
     });
   }
