@@ -1,11 +1,19 @@
 """Synthetic accounts for Playwright. Safe to run more than once."""
 
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from tests.factories import SYNTHETIC_PASSWORD
 from tracker.extra_models import AccountControl, Membership, Role
-from tracker.models import BabyProfile, Household
+from tracker.models import BabyProfile, Event, Household
+
+# The range browser test compares 24h with 7d. Every other test logs "now",
+# so a fresh database has the same diaper total in both windows unless this
+# row sits between them. Re-seeding moves it so it cannot age out of 7 days.
+RANGE_DIAPER_ID = 'range-diaper-outside-24h'
 
 USERS = (
     ('synth_admin', 'synth_admin@example.com', Role.ADMIN),
@@ -72,4 +80,30 @@ class Command(BaseCommand):
                 membership.role = role
                 membership.is_active = True
                 membership.save(actor=admin, expected_version=membership.version)
+        self._place_range_diaper(baby, admin)
         self.stdout.write('seeded synthetic household')
+
+    def _place_range_diaper(self, baby, actor):
+        when = timezone.now() - timedelta(days=3)
+        event = Event.objects.filter(
+            household=baby.household,
+            source_system='e2e',
+            source_activity_id=RANGE_DIAPER_ID,
+        ).first()
+        if event is None:
+            event = Event(
+                baby=baby,
+                source_system='e2e',
+                source_activity_id=RANGE_DIAPER_ID,
+                kind=Event.Kind.DIAPER,
+                diaper_type='wet',
+                occurred_at=when,
+                recorded_at=when,
+            )
+            event.save(actor=actor)
+            return
+        event.occurred_at = when
+        event.recorded_at = when
+        event.kind = Event.Kind.DIAPER
+        event.diaper_type = 'wet'
+        event.save(actor=actor, expected_version=event.version)
