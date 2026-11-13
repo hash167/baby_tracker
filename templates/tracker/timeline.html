@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load care %}
 
-{% block title %}Timeline · Baby Tracker{% endblock %}
+{% block title %}History · Baby Tracker{% endblock %}
 
 {% block content %}
 <section class="card"
@@ -15,7 +15,7 @@
          data-partial-url="{% url 'timeline-partial' %}?day={{ day|date:'Y-m-d' }}{% if kind %}&amp;type={{ kind }}{% endif %}"
          {% endif %}>
   <div class="row spread">
-    <h1>Timeline</h1>
+    <h1>History</h1>
     {% if babies|length > 1 %}
       <form method="post" action="{% url 'select-baby' %}">
         {% csrf_token %}
@@ -46,55 +46,6 @@
     <p>Since last diaper: {{ since_diaper|ago }}</p>
     <p class="muted">Feeds that pass midnight stay on the day they started.</p>
   </div>
-
-  <h2>Diaper</h2>
-  <form class="stack" method="post" action="{% url 'diaper-create' %}"
-        hx-post="{% url 'diaper-create' %}"
-        hx-target="#save-result"
-        hx-swap="innerHTML"
-        data-idempotent
-        hx-disabled-elt="button">
-    {% csrf_token %}
-    <input type="hidden" name="idempotency_key" value="">
-    <div class="actions">
-      <button type="submit" name="diaper_type" value="wet">Wet</button>
-      <button type="submit" name="diaper_type" value="dirty">Dirty</button>
-      <button type="submit" name="diaper_type" value="both">Both</button>
-      <button type="submit" name="diaper_type" value="dry">Dry</button>
-    </div>
-    <label>When (leave blank for now)
-      <input type="datetime-local" name="occurred_at">
-    </label>
-    <label>Notes
-      <textarea name="notes" maxlength="2000" rows="2"></textarea>
-    </label>
-  </form>
-  <div id="save-result"></div>
-
-  <h2>Bottle</h2>
-  <form class="stack" method="post" action="{% url 'bottle-create' %}"
-        hx-post="{% url 'bottle-create' %}"
-        hx-target="#save-result"
-        hx-swap="innerHTML"
-        data-idempotent
-        hx-disabled-elt="button">
-    {% csrf_token %}
-    <input type="hidden" name="idempotency_key" value="">
-    <label>Volume
-      <input name="volume" inputmode="decimal" autocomplete="off">
-    </label>
-    <label>Unit
-      <select name="unit">
-        <option value="ml">ml</option>
-        <option value="floz">fl oz</option>
-      </select>
-    </label>
-    <div class="actions">
-      <button type="submit" name="bottle_type" value="breast_milk">Breast milk</button>
-      <button type="submit" name="bottle_type" value="formula">Formula</button>
-      <button type="submit" name="bottle_type" value="mixed">Mixed</button>
-    </div>
-  </form>
 
   {% if range_mode %}
     <div id="range-panel">

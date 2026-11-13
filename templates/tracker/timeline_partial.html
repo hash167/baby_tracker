@@ -1,39 +1,49 @@
 {% load care %}
-<ul class="events">
-  {% for event in events %}
-    <li>
-      <p class="event-title">
-        {% if event.kind == 'diaper' and event.diaper_type %}
-          <strong class="diaper-type diaper-{{ event.diaper_type }}">
-            <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
-            <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
-          </strong>
-        {% elif event.kind == 'bottle' or event.kind == 'pump' %}
-          <strong class="activity-label">{{ event|activity_label }}</strong>
-        {% else %}
-          <strong>{{ event.get_kind_display }}</strong>
-        {% endif %}
-        <span class="event-time">{{ event.occurred_at|date:"g:i A" }}</span>
-        {% if event.kind == 'feed' %}
-          · L {{ event.left_seconds|duration }} · R {{ event.right_seconds|duration }}
-          {% if event.end_side %} · ended {{ event.end_side }}{% endif %}
-        {% endif %}
-      </p>
-      {% if event.notes %}<p>{{ event.notes }}</p>{% endif %}
-      <p class="muted">Logged by {{ event.created_by.username }}</p>
-      <p class="row">
-        <a href="{% url 'event-edit' event.pk %}">Edit</a>
-        <a href="{% url 'event-history' event.pk %}">History</a>
-        {% if event.created_by_id == request.user.pk or nav_membership.role == 'admin' or nav_membership.role == 'parent' %}
-          <form method="post" action="{% url 'event-delete' event.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="version" value="{{ event.version }}">
-            <button type="submit" class="quiet">Delete</button>
-          </form>
-        {% endif %}
-      </p>
-    </li>
-  {% empty %}
-    <li>Nothing recorded for this day.</li>
-  {% endfor %}
-</ul>
+{% regroup events by occurred_at|local_day as day_groups %}
+{% for group in day_groups %}
+  <h3 class="day-header">{{ group.grouper|day_heading }}</h3>
+  <ul class="events">
+    {% for event in group.list %}
+      <li>
+        <p class="event-title">
+          {% if event.kind == 'diaper' and event.diaper_type %}
+            <strong class="diaper-type diaper-{{ event.diaper_type }}">
+              <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
+              <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
+            </strong>
+          {% elif event.kind == 'bottle' or event.kind == 'pump' %}
+            <strong class="activity-label">{{ event|activity_label }}</strong>
+          {% else %}
+            <strong>{{ event.get_kind_display }}</strong>
+          {% endif %}
+          <span class="event-time">
+            {% if event.kind == 'feed' and event.feed_ended_at %}
+              {{ event.occurred_at|when_range:event.feed_ended_at }}
+            {% else %}
+              {{ event.occurred_at|when_label }}
+            {% endif %}
+          </span>
+          {% if event.kind == 'feed' %}
+            · L {{ event.left_seconds|duration }} · R {{ event.right_seconds|duration }}
+            {% if event.end_side %} · ended {{ event.end_side }}{% endif %}
+          {% endif %}
+        </p>
+        {% if event.notes %}<p>{{ event.notes }}</p>{% endif %}
+        <p class="muted">Logged by {{ event.created_by.username }}</p>
+        <p class="event-actions">
+          <a href="{% url 'event-edit' event.pk %}">Edit</a>
+          <a href="{% url 'event-history' event.pk %}">History</a>
+          {% if event.created_by_id == request.user.pk or nav_membership.role == 'admin' or nav_membership.role == 'parent' %}
+            <form method="post" action="{% url 'event-delete' event.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="version" value="{{ event.version }}">
+              <button type="submit" class="quiet">Delete</button>
+            </form>
+          {% endif %}
+        </p>
+      </li>
+    {% endfor %}
+  </ul>
+{% empty %}
+  <p>Nothing recorded for this range.</p>
+{% endfor %}

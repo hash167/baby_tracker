@@ -68,6 +68,9 @@
     var elt = event.detail.elt;
     var form = elt && elt.matches && elt.matches('form') ? elt : null;
     if (!form && elt && elt.closest) form = elt.closest('form');
+    if (form && form.matches && (form.matches('form[data-idempotent]') || form.matches('form[data-undo]'))) {
+      refreshPartial(true);
+    }
     if (!form || !form.matches || !form.matches('form[data-idempotent]')) return;
     var input = form.querySelector('input[name="idempotency_key"]');
     if (input) input.value = '';
@@ -76,7 +79,8 @@
 
   document.body.addEventListener('click', function (event) {
     if (!event.target.closest || !event.target.closest('[data-retry]')) return;
-    var form = document.querySelector('form[data-idempotent]');
+    var form = document.querySelector('details.quick[open] form[data-idempotent]');
+    if (!form) form = document.querySelector('form[data-idempotent]');
     if (!form) return;
     ensureKey(form);
     if (form.requestSubmit) form.requestSubmit();
@@ -105,10 +109,11 @@
     return root.getAttribute('data-partial-url');
   }
 
-  function refreshPartial() {
+  function refreshPartial(force) {
     var root = pollRoot();
     if (!root || !window.htmx) return;
     if (root.id === 'activity') {
+      if (!force && document.querySelector('details.quick[open]')) return;
       htmx.ajax('GET', root.getAttribute('data-partial-url'), {
         target: '#activity',
         swap: 'innerHTML',

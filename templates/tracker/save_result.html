@@ -1,5 +1,21 @@
+{% load care %}
 {% if saved %}
-  <p class="ok" role="status" data-event-id="{{ event.pk }}">Saved{% if replay %} (already recorded){% endif %}.</p>
+  <div class="log-toast-inner" role="status">
+    <p>Saved {{ label|default:"entry" }}{% if when %} · {{ when }}{% endif %}{% if replay %} (already recorded){% endif %}.</p>
+    {% if event and not replay %}
+      <form method="post" action="{% url 'event-delete' event.pk %}"
+            hx-post="{% url 'event-delete' event.pk %}"
+            hx-target="#log-toast"
+            hx-swap="innerHTML"
+            data-undo>
+        {% csrf_token %}
+        <input type="hidden" name="version" value="{{ event.version }}">
+        <button type="submit">Undo</button>
+      </form>
+    {% endif %}
+  </div>
+{% elif undone %}
+  <div class="log-toast-inner" role="status"><p>Removed.</p></div>
 {% else %}
   <p class="error" role="alert">{{ error|default:"Not saved" }}</p>
   <button type="button" data-retry>Retry</button>

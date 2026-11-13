@@ -73,8 +73,9 @@ input, select, textarea {
   padding: 0.7rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #f7f8fb;
-  color: #1c2430;
+  background: #171b28;
+  color: #f4f6fb;
+  color-scheme: dark;
 }
 
 button, .actions button {
@@ -140,6 +141,59 @@ button.quiet { background: transparent; color: var(--warn); border: 1px solid va
 .diaper-dry { color: #243044; background: #e8eef3; }
 
 .events { list-style: none; padding: 0; }
+
+.day-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0.8rem 0 0.2rem;
+  padding: 0.35rem 0;
+  background: #1f2433;
+  color: #f4f6fb;
+  font-size: 1rem;
+}
+
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+.event-actions form { margin: 0; }
+.event-actions button,
+.event-actions .quiet {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+}
+
+.log-toast { position: sticky; top: 0; z-index: 6; }
+.log-toast-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0;
+  padding: 0.75rem 1rem;
+  background: #14343a;
+  color: #e7f7f4;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.log-toast-inner p { margin: 0; }
+.log-toast-inner button { width: auto; min-height: 44px; }
+
+.type-picks {
+  border: 0;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.type-picks label { margin: 0; font-weight: 700; }
+.type-picks input { width: auto; margin-right: 0.25rem; }
 .events li {
   border-top: 1px solid var(--line);
   padding: 0.75rem 0;

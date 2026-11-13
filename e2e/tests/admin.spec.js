@@ -20,7 +20,7 @@ test('admin invite creates one account and can sign a caregiver out', async ({ b
   await guest.getByLabel('Password', { exact: true }).fill('synthetic-pass-word-1');
   await guest.getByLabel('Confirm password').fill('synthetic-pass-word-1');
   await guest.getByRole('button', { name: 'Create account' }).click();
-  await expect(guest.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+  await expect(guest.getByRole('heading', { name: 'History' })).toBeVisible();
   await guest.goto(link);
   await expect(guest.getByText('already used')).toBeVisible();
 

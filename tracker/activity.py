@@ -6,7 +6,7 @@ Volumes are stored as millilitres. This module does not log row contents.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone
@@ -46,10 +46,62 @@ def ago_label(delta) -> str:
     return f'{minutes}m ago'
 
 
+def _clock(local: datetime) -> str:
+    hour = str(int(local.strftime('%I')))
+    return f'{hour}:{local.strftime("%M")} {local.strftime("%p")}'
+
+
+def _day_phrase(day, today) -> str:
+    if day == today:
+        return 'Today'
+    if day == today - timedelta(days=1):
+        return 'Yesterday'
+    return f'{day.strftime("%a %b")} {day.day}'
+
+
+def day_header(day, *, now=None) -> str:
+    """Sticky heading: Today, Fri Nov 13 / Yesterday, Thu Nov 12 / Wed Nov 11."""
+    from django.utils import timezone as dj_tz
+
+    today = dj_tz.localtime(now or dj_tz.now()).date()
+    dated = f'{day.strftime("%a %b")} {day.day}'
+    phrase = _day_phrase(day, today)
+    if phrase in ('Today', 'Yesterday'):
+        return f'{phrase}, {dated}'
+    return dated
+
+
+def when_stamp(instant: datetime, *, now=None) -> str:
+    """Today 10:31 AM, Yesterday 10:31 AM, or Fri Nov 13 · 10:31 AM."""
+    from django.utils import timezone as dj_tz
+
+    local = dj_tz.localtime(instant)
+    today = dj_tz.localtime(now or dj_tz.now()).date()
+    phrase = _day_phrase(local.date(), today)
+    clock = _clock(local)
+    if phrase in ('Today', 'Yesterday'):
+        return f'{phrase} {clock}'
+    return f'{phrase} · {clock}'
+
+
+def when_span(start: datetime, end: datetime, *, now=None) -> str:
+    """Full start and end when a feed crosses local midnight."""
+    from django.utils import timezone as dj_tz
+
+    start_local = dj_tz.localtime(start)
+    end_local = dj_tz.localtime(end)
+    if start_local.date() == end_local.date():
+        return f'{when_stamp(start, now=now)}–{_clock(end_local)}'
+    start_text = (
+        f'{start_local.strftime("%a %b")} {start_local.day} · {_clock(start_local)}'
+    )
+    end_text = f'{end_local.strftime("%a %b")} {end_local.day} · {_clock(end_local)}'
+    return f'{start_text} – {end_text}'
+
+
 def clock_label(instant: datetime, zone: str) -> str:
-    local = instant.astimezone(ZoneInfo(zone))
-    hour = local.strftime('%I').lstrip('0') or '12'
-    return f'{hour}:{local.strftime("%M")}{local.strftime("%p").lower()}'
+    del zone
+    return when_stamp(instant)
 
 
 def duration_label(seconds) -> str:
@@ -236,10 +288,11 @@ def _hero_feed(baby, now):
         .first()
     )
     if event is None:
-        return {'ago': '—', 'amount': '—', 'kind': ''}
+        return {'ago': '—', 'amount': '—', 'kind': '', 'when': ''}
     amount = _feed_amount(event)
     return {
         'ago': ago_label(now - event.occurred_at),
+        'when': when_stamp(event.occurred_at, now=now),
         'amount': amount or '—',
         'kind': event.kind,
     }
@@ -252,9 +305,10 @@ def _hero_pump(baby, now):
         .first()
     )
     if event is None:
-        return {'ago': '—', 'amount': '—'}
+        return {'ago': '—', 'amount': '—', 'when': ''}
     return {
         'ago': ago_label(now - event.occurred_at),
+        'when': when_stamp(event.occurred_at, now=now),
         'amount': ml_label(_event_ml(event)) or '—',
     }
 
@@ -268,9 +322,10 @@ def _hero_diaper(baby, now):
         .first()
     )
     if event is None:
-        return {'ago': '—', 'label': '—'}
+        return {'ago': '—', 'label': '—', 'when': ''}
     return {
         'ago': ago_label(now - event.occurred_at),
+        'when': when_stamp(event.occurred_at, now=now),
         'label': _diaper_word(event.diaper_type).lower() or '—',
         'type': event.diaper_type,
     }
@@ -286,14 +341,17 @@ def _hero_sleep(baby, now):
         return {'text': 'No sleep logged', 'active': False}
     if _sleep_open(event):
         return {
-            'text': f'Sleeping for {duration_label((now - event.occurred_at).total_seconds())}',
+            'text': (
+                f'Sleeping since {when_stamp(event.occurred_at, now=now)} '
+                f'for {duration_label((now - event.occurred_at).total_seconds())}'
+            ),
             'active': True,
         }
     ended = _sleep_end(event)
     if ended is None:
         return {'text': 'No sleep logged', 'active': False}
     return {
-        'text': f'Woke up {ago_label(now - ended)}',
+        'text': f'Woke up {when_stamp(ended, now=now)} · {ago_label(now - ended)}',
         'active': False,
     }
 
@@ -366,13 +424,13 @@ def _sleep_row(event, zone: str, today, now) -> dict:
     start = event.occurred_at.astimezone(ZoneInfo(zone))
     ended = _sleep_end(event)
     if _sleep_open(event):
-        span = f'{clock_label(event.occurred_at, zone)}–now'
+        span = f'{when_stamp(event.occurred_at, now=now)}–now'
         seconds = (now - event.occurred_at).total_seconds()
     elif ended is not None:
-        span = f'{clock_label(event.occurred_at, zone)}–{clock_label(ended, zone)}'
+        span = when_span(event.occurred_at, ended, now=now)
         seconds = (ended - event.occurred_at).total_seconds()
     else:
-        span = clock_label(event.occurred_at, zone)
+        span = when_stamp(event.occurred_at, now=now)
         seconds = 0
     return {
         'pk': event.pk,

@@ -90,6 +90,30 @@ from tracker.summary import (
 from tracker.trends import TREND_LENGTHS, build_trends, empty_trends, trend_length
 
 
+def _log_saved(request, event, replay, label):
+    from tracker.activity import when_span, when_stamp
+
+    if event is not None and event.kind == Event.Kind.FEED and event.feed_ended_at:
+        when = when_span(event.occurred_at, event.feed_ended_at)
+    elif event is not None:
+        when = when_stamp(event.occurred_at)
+    else:
+        when = ''
+    response = render(
+        request,
+        'tracker/save_result.html',
+        {
+            'saved': True,
+            'event': event,
+            'replay': replay,
+            'label': label,
+            'when': when,
+        },
+    )
+    response['HX-Trigger'] = 'refresh-timeline'
+    return response
+
+
 def _role(request) -> str:
     membership = getattr(request, 'membership', None)
     if membership is None:
@@ -555,13 +579,12 @@ def bottle_create(request):
             status=500,
         )
     record_functional_attributes(event_type='bottle', outcome='success')
-    response = render(
-        request,
-        'tracker/save_result.html',
-        {'saved': True, 'replay': replay},
-    )
-    response['HX-Trigger'] = 'refresh-timeline'
-    return response
+    kind = {
+        'breast_milk': 'Breast milk bottle',
+        'formula': 'Formula bottle',
+        'mixed': 'Mixed bottle',
+    }.get(request.POST.get('bottle_type') or '', 'Bottle')
+    return _log_saved(request, _event, replay, kind)
 
 
 @require_POST
@@ -596,13 +619,7 @@ def pump_create(request):
         record_functional_attributes(event_type='pump', outcome='save_failed')
         return render(request, 'tracker/save_result.html', {'saved': False}, status=500)
     record_functional_attributes(event_type='pump', outcome='success')
-    response = render(
-        request,
-        'tracker/save_result.html',
-        {'saved': True, 'replay': replay},
-    )
-    response['HX-Trigger'] = 'refresh-timeline'
-    return response
+    return _log_saved(request, _event, replay, 'Pump')
 
 
 @require_POST
@@ -639,13 +656,7 @@ def sleep_create(request):
         record_functional_attributes(event_type='sleep', outcome='save_failed')
         return render(request, 'tracker/save_result.html', {'saved': False}, status=500)
     record_functional_attributes(event_type='sleep', outcome='success')
-    response = render(
-        request,
-        'tracker/save_result.html',
-        {'saved': True, 'replay': replay},
-    )
-    response['HX-Trigger'] = 'refresh-timeline'
-    return response
+    return _log_saved(request, _event, replay, 'Sleep')
 
 
 @require_POST
@@ -692,13 +703,10 @@ def diaper_create(request):
         event_type=event.diaper_type or 'diaper',
         outcome='success',
     )
-    response = render(
-        request,
-        'tracker/save_result.html',
-        {'saved': True, 'event': event, 'replay': replay},
-    )
-    response['HX-Trigger'] = 'refresh-timeline'
-    return response
+    from tracker.diapers import DIAPER_LABELS
+
+    label = f'{DIAPER_LABELS.get(event.diaper_type, "Diaper")} diaper'
+    return _log_saved(request, event, replay, label)
 
 
 @require_http_methods(['GET', 'POST'])
@@ -790,12 +798,23 @@ def event_delete(request, event_id):
         event.delete(actor=request.user, expected_version=expected)
     except VersionConflict:
         event.refresh_from_db()
+        if request.headers.get('HX-Request'):
+            return render(
+                request,
+                'tracker/save_result.html',
+                {'saved': False, 'error': 'This entry changed. Reload and try again.'},
+                status=409,
+            )
         return render(
             request,
             'tracker/event_form.html',
             {'event': event, 'conflict': True},
             status=409,
         )
+    if request.headers.get('HX-Request'):
+        response = render(request, 'tracker/save_result.html', {'undone': True})
+        response['HX-Trigger'] = 'refresh-timeline'
+        return response
     return redirect('timeline')
 
 

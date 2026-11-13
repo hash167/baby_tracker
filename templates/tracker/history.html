@@ -5,7 +5,14 @@
 
 {% block content %}
 <section class="card">
-  <h1>History</h1>
+  <h1>Entry history</h1>
+  <p class="event-time">
+    {% if event.kind == 'feed' and event.feed_ended_at %}
+      {{ event.occurred_at|when_range:event.feed_ended_at }}
+    {% else %}
+      {{ event.occurred_at|when_label }}
+    {% endif %}
+  </p>
   {% if event.kind == 'diaper' and event.diaper_type %}
     <p class="event-title">
       <strong class="diaper-type diaper-{{ event.diaper_type }}">
@@ -17,7 +24,7 @@
   <ul class="events">
     {% for entry in entries %}
       <li>
-        <p><strong>{{ entry.action }}</strong> by {{ entry.actor.username }} at {{ entry.at|date:"N j, Y, g:i A" }}</p>
+        <p><strong>{{ entry.action }}</strong> by {{ entry.actor.username }} · {{ entry.at|when_label }}</p>
         <ul>
           {% for field, change in entry.changes.items %}
             {% if field == 'diaper_type' %}

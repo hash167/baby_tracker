@@ -1,8 +1,44 @@
-from django import template
+from datetime import date, datetime
 
+from django import template
+from django.utils import timezone
+
+from tracker.activity import day_header, when_span, when_stamp
 from tracker.diapers import DIAPER_LABELS, DIAPER_MARKS
 
 register = template.Library()
+
+
+@register.filter
+def local_day(instant):
+    if not isinstance(instant, datetime):
+        return instant
+    return timezone.localtime(instant).date()
+
+
+@register.filter
+def day_heading(day):
+    if isinstance(day, datetime):
+        day = timezone.localtime(day).date()
+    if not isinstance(day, date):
+        return day
+    return day_header(day)
+
+
+@register.filter
+def when_label(instant):
+    if not isinstance(instant, datetime):
+        return ''
+    return when_stamp(instant)
+
+
+@register.filter
+def when_range(start, end):
+    if not isinstance(start, datetime):
+        return ''
+    if not isinstance(end, datetime):
+        return when_stamp(start)
+    return when_span(start, end)
 
 
 @register.filter

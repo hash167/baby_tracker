@@ -6,6 +6,13 @@
 {% block content %}
 <section class="card narrow">
   <h1>Edit entry</h1>
+  <p class="event-time">
+    {% if event.kind == 'feed' and event.feed_ended_at %}
+      {{ event.occurred_at|when_range:event.feed_ended_at }}
+    {% else %}
+      {{ event.occurred_at|when_label }}
+    {% endif %}
+  </p>
   {% if conflict %}
     <p class="error" role="alert">This entry changed. The current values are shown below. Save again if they are still right.</p>
   {% endif %}

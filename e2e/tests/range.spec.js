@@ -12,9 +12,6 @@ test('timeline ranges switch with HTMX and show counts', async ({ page }) => {
   expect(box.height).toBeGreaterThanOrEqual(44);
 
   const before = Number(await page.locator('#diaper-total').innerText());
-  await page.getByRole('button', { name: 'Wet' }).click();
-  await expect(page.locator('#save-result')).toContainText('Saved');
-  await expect(page.locator('#diaper-total')).toHaveText(String(before + 1));
 
   await page.getByRole('link', { name: '7 days' }).click();
   await expect(page.getByRole('heading', { name: 'Last 7 days' })).toBeVisible();

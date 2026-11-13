@@ -6,7 +6,7 @@
       <summary class="add" aria-label="Add a feed">+</summary>
       <div class="quick-panel">
         <p><a class="text-button" href="{% url 'feed' %}">Start a breastfeed</a></p>
-        <form method="post" action="{% url 'bottle-create' %}" hx-post="{% url 'bottle-create' %}" hx-target="#save-result" hx-swap="innerHTML" data-idempotent>
+        <form method="post" action="{% url 'bottle-create' %}" hx-post="{% url 'bottle-create' %}" hx-target="#log-toast" hx-swap="innerHTML" data-idempotent>
           {% csrf_token %}
           <input type="hidden" name="idempotency_key" value="">
           <label>Volume mL<input name="volume" inputmode="decimal" autocomplete="off"></label>
@@ -23,6 +23,7 @@
     <span class="blob blob-feed" aria-hidden="true">{% include "tracker/icon_bottle.html" %}</span>
     <div>
       <p class="kicker">Last feeding</p>
+      <p>{{ feed.when }}</p>
       <p>{{ feed.ago }}</p>
     </div>
     <p class="hero-value">{{ feed.amount }}</p>
@@ -51,7 +52,7 @@
     <h2>Pump</h2>
     <details class="quick">
       <summary class="add" aria-label="Add a pump">+</summary>
-      <form class="quick-panel" method="post" action="{% url 'pump-create' %}" hx-post="{% url 'pump-create' %}" hx-target="#save-result" hx-swap="innerHTML" data-idempotent>
+      <form class="quick-panel" method="post" action="{% url 'pump-create' %}" hx-post="{% url 'pump-create' %}" hx-target="#log-toast" hx-swap="innerHTML" data-idempotent>
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="">
         <label>Volume mL<input name="volume" inputmode="decimal" autocomplete="off"></label>
@@ -63,6 +64,7 @@
     <span class="blob blob-pump" aria-hidden="true">{% include "tracker/icon_pump.html" %}</span>
     <div>
       <p class="kicker">Last session</p>
+      <p>{{ pump.when }}</p>
       <p>{{ pump.ago }}</p>
     </div>
     <p class="hero-value">{{ pump.amount }}</p>
@@ -89,15 +91,23 @@
     <h2>Diaper</h2>
     <details class="quick">
       <summary class="add" aria-label="Add a diaper">+</summary>
-      <form class="quick-panel" method="post" action="{% url 'diaper-create' %}" hx-post="{% url 'diaper-create' %}" hx-target="#save-result" hx-swap="innerHTML" data-idempotent>
+      <form class="quick-panel" method="post" action="{% url 'diaper-create' %}" hx-post="{% url 'diaper-create' %}" hx-target="#log-toast" hx-swap="innerHTML" data-idempotent>
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="">
-        <div class="actions">
-          <button type="submit" name="diaper_type" value="wet">Wet</button>
-          <button type="submit" name="diaper_type" value="dirty">Dirty</button>
-          <button type="submit" name="diaper_type" value="both">Mix</button>
-          <button type="submit" name="diaper_type" value="dry">Dry</button>
-        </div>
+        <fieldset class="type-picks">
+          <legend>Type</legend>
+          <label><input type="radio" name="diaper_type" value="wet" required> Wet</label>
+          <label><input type="radio" name="diaper_type" value="dirty"> Dirty</label>
+          <label><input type="radio" name="diaper_type" value="both"> Mix</label>
+          <label><input type="radio" name="diaper_type" value="dry"> Dry</label>
+        </fieldset>
+        <label>When
+          <input type="datetime-local" name="occurred_at">
+        </label>
+        <label>Notes
+          <textarea name="notes" maxlength="2000" rows="2"></textarea>
+        </label>
+        <button type="submit">Save diaper</button>
       </form>
     </details>
   </header>
@@ -105,6 +115,7 @@
     <span class="blob blob-diaper" aria-hidden="true">{% include "tracker/icon_diaper.html" %}</span>
     <div>
       <p class="kicker">Last change</p>
+      <p>{{ diaper.when }}</p>
       <p>{{ diaper.ago }}</p>
     </div>
     <p class="hero-value diaper-word">{{ diaper.label }}</p>
@@ -133,7 +144,7 @@
     <h2>Sleep</h2>
     <details class="quick">
       <summary class="add" aria-label="Add sleep">+</summary>
-      <form class="quick-panel" method="post" action="{% url 'sleep-create' %}" hx-post="{% url 'sleep-create' %}" hx-target="#save-result" hx-swap="innerHTML" data-idempotent>
+      <form class="quick-panel" method="post" action="{% url 'sleep-create' %}" hx-post="{% url 'sleep-create' %}" hx-target="#log-toast" hx-swap="innerHTML" data-idempotent>
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="">
         <label>Minutes (blank if still sleeping)<input name="minutes" inputmode="decimal" autocomplete="off"></label>
@@ -161,4 +172,3 @@
     {% endfor %}
   </ul>
 </article>
-<div id="save-result"></div>
