@@ -333,24 +333,25 @@ def _strip_nontimer(value: str) -> tuple[str, bool]:
     return text, False
 
 
-def _breastfeed(row: ParsedRow, cleaned: dict) -> None:
+def _breast_duration(row: ParsedRow, cleaned: dict, side: str):
+    """Integer seconds column, or the older duration-plus-unit columns."""
+    seconds = cleaned.get(f'[Breastfeed] {side} Duration (Seconds)', '')
+    if seconds != '':
+        return _duration(row, seconds, 's', side.lower())
     unit = cleaned.get('[Breastfeed] Duration Unit', '')
-    left = _duration(
+    return _duration(
         row,
-        cleaned.get('[Breastfeed] Left Duration', ''),
+        cleaned.get(f'[Breastfeed] {side} Duration', ''),
         unit,
-        'left',
+        side.lower(),
     )
-    right = _duration(
-        row,
-        cleaned.get('[Breastfeed] Right Duration', ''),
-        unit,
-        'right',
-    )
-    row.mapped['left_seconds'] = left
-    row.mapped['right_seconds'] = right
-    start_raw = cleaned.get('[Breastfeed] Start Side', '') or cleaned.get(
-        '[Breastfeed] Begin Side', ''
+
+
+def _breastfeed(row: ParsedRow, cleaned: dict) -> None:
+    row.mapped['left_seconds'] = _breast_duration(row, cleaned, 'Left')
+    row.mapped['right_seconds'] = _breast_duration(row, cleaned, 'Right')
+    start_raw = cleaned.get('[Breastfeed] Begin Side', '') or cleaned.get(
+        '[Breastfeed] Start Side', ''
     )
     end_raw = cleaned.get('[Breastfeed] End Side', '')
     start_text, start_manual = _strip_nontimer(start_raw)
@@ -968,6 +969,139 @@ def _revert_update(event, link, actor):
             value = _parse_iso(value)
         setattr(event, name, value)
     event.save(actor=actor, expected_version=event.version)
+
+
+def backfill_import_fields(*, dry_run: bool = False, batch_id=None) -> dict:
+    """Fill import fields that were stored empty because a column was unread.
+
+    Only NULL or blank fields are written, and only on events that still
+    match the imported version. Counts are the only values returned.
+    """
+    from tracker.extra_models import ImportBatch, ImportRow
+
+    counts = {
+        'examined': 0,
+        'updated': 0,
+        'skipped_edited': 0,
+        'unchanged': 0,
+    }
+    rows = ImportRow.objects.filter(
+        batch__status=ImportBatch.Status.COMMITTED,
+        event__isnull=False,
+    ).select_related('event', 'batch__created_by')
+    if batch_id:
+        rows = rows.filter(batch_id=batch_id)
+    for row in rows.order_by('row_number'):
+        counts['examined'] += 1
+        event = row.event
+        if event.deleted_at is not None:
+            counts['unchanged'] += 1
+            continue
+        link = event.import_links.order_by('-imported_version').first()
+        imported_version = link.imported_version if link is not None else 1
+        if event.version != imported_version:
+            counts['skipped_edited'] += 1
+            continue
+        parsed = _parse_raw(row.row_number, row.raw or {})
+        if not _fill_missing(event, parsed.mapped):
+            counts['unchanged'] += 1
+            continue
+        counts['updated'] += 1
+        if dry_run:
+            continue
+        event.save(actor=row.batch.created_by, expected_version=event.version)
+        if link is not None:
+            link.imported_version = event.version
+            link.save(update_fields=['imported_version'])
+    return counts
+
+
+def _fill_missing(event, mapped: dict) -> bool:
+    kind = mapped.get('kind')
+    if kind == Event.Kind.FEED:
+        if event.feed_source != Event.FeedSource.IMPORT:
+            return False
+        changed = False
+        changed |= _set_if_null(event, 'left_seconds', mapped.get('left_seconds'))
+        changed |= _set_if_null(event, 'right_seconds', mapped.get('right_seconds'))
+        changed |= _set_if_blank(event, 'start_side', mapped.get('start_side') or '')
+        changed |= _set_if_blank(event, 'end_side', mapped.get('end_side') or '')
+        if event.feed_ended_at is None:
+            ended = _parse_iso(mapped.get('ended_at'))
+            if ended is not None:
+                event.feed_ended_at = ended
+                changed = True
+        return changed
+    if kind in (Event.Kind.BOTTLE, Event.Kind.PUMP):
+        return _fill_archive(event, mapped.get('archive') or {}, volume=True)
+    if kind == Event.Kind.SLEEP:
+        return _fill_archive(
+            event,
+            mapped.get('archive') or {},
+            keys=('duration_seconds', 'ended_at'),
+        )
+    if kind == Event.Kind.DIAPER:
+        changed = _fill_archive(
+            event,
+            mapped.get('archive') or {},
+            keys=('detail', 'dirty_color', 'dirty_texture'),
+        )
+        if not event.diaper_type and mapped.get('diaper_type'):
+            event.diaper_type = mapped['diaper_type']
+            changed = True
+        return changed
+    return False
+
+
+def _set_if_null(event, field: str, value) -> bool:
+    if value is None or getattr(event, field) is not None:
+        return False
+    setattr(event, field, value)
+    return True
+
+
+def _set_if_blank(event, field: str, value: str) -> bool:
+    if not value or getattr(event, field):
+        return False
+    setattr(event, field, value)
+    return True
+
+
+def _fill_archive(event, fresh: dict, *, keys=(), volume: bool = False) -> bool:
+    if not fresh:
+        return False
+    current = dict(event.archive or {})
+    changed = False
+    if (
+        volume
+        and current.get('volume_ml') in (None, '')
+        and fresh.get('volume_ml')
+        not in (
+            None,
+            '',
+        )
+    ):
+        current['volume_ml'] = fresh['volume_ml']
+        changed = True
+    names = keys or (
+        'volume',
+        'total',
+        'left',
+        'right',
+        'breast_milk',
+        'formula',
+        'bottle_type',
+        'duration_seconds',
+        'ended_at',
+    )
+    for name in names:
+        if current.get(name) not in (None, '') or fresh.get(name) in (None, ''):
+            continue
+        current[name] = fresh[name]
+        changed = True
+    if changed:
+        event.archive = current
+    return changed
 
 
 def purge_expired(*, now=None) -> int:

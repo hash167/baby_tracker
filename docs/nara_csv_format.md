@@ -16,7 +16,7 @@ Shared columns:
 Type-specific columns used by the synthetic fixtures and the parser:
 
 - Profile: `[Profile] Birth Date`, `[Profile] Birth Date (Adjusted)`, `[Profile] Sex`, `[Profile] Type`
-- Breastfeed: `[Breastfeed] Start Side` or `[Breastfeed] Begin Side`, `[Breastfeed] End Side`, `[Breastfeed] Left Duration`, `[Breastfeed] Right Duration`, `[Breastfeed] Duration Unit` (`s`, `min`, or `ms`). A side may end in `.nonTimer` (`LEFT.nonTimer`, `RIGHT.nonTimer`); the suffix is removed and the feed is marked manual.
+- Breastfeed: `[Breastfeed] Begin Side` or `[Breastfeed] Start Side`, `[Breastfeed] End Side`, `[Breastfeed] Left Duration (Seconds)` and `[Breastfeed] Right Duration (Seconds)`. Older files may use `[Breastfeed] Left Duration`, `[Breastfeed] Right Duration`, and `[Breastfeed] Duration Unit` (`s`, `min`, or `ms`) instead. A side may end in `.nonTimer` (`LEFT.nonTimer`, `RIGHT.nonTimer`); the suffix is removed and the feed is marked manual.
 - Bottle feed: `[Bottle Feed] Type` (`Breast Milk`, `Formula`, `Breast Milk Formula`, or empty), `[Bottle Feed] Volume` and `[Bottle Feed] Volume Unit` (`ML`, `FLOZ`, or empty), `[Bottle Feed] Breast Milk Volume`, `[Bottle Feed] Formula Volume` and their units, `[Bottle Feed] Formula Name`. An empty volume is unknown and does not warn. An empty unit warns only when a volume is present.
 - Pump: `[Pump] Left Volume`, `[Pump] Right Volume`, `[Pump] Total Volume` and their units, `[Pump] Duration (Seconds)`, `[Pump] End Date/time (Epoch)`.
 - Diaper: `[Diaper] Type` (`Wet`, `Dirty`, `Dirty Wet`, `Dry`), with `[Diaper] Status` as a fallback. `[Diaper] Detail`, `[Diaper] Dirty Color`, and `[Diaper] Dirty Texture` are stored and do not warn.

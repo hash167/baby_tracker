@@ -63,6 +63,8 @@ def test_real_headers_map_without_spurious_warnings():
     assert _codes(feed) == []
     assert feed.mapped['start_side'] == 'left'
     assert feed.mapped['end_side'] == 'right'
+    assert feed.mapped['left_seconds'] == 600
+    assert feed.mapped['right_seconds'] == 300
     assert feed.mapped['manual_entry'] is True
     assert feed.mapped['kind'] == 'feed'
 

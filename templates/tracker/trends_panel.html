@@ -14,12 +14,12 @@
   <section class="summary-card" aria-label="{{ label }}">
     <h2>{{ label }}</h2>
     <ul class="kind-counts">
-      <li>Diapers/day <strong>{{ headlines.diapers_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.diapers_per_day.change|signed }} vs {{ previous_label }}</span></li>
-      <li>Nursing min/day <strong>{{ headlines.nursing_minutes_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.nursing_minutes_per_day.change|signed }}</span></li>
-      <li>Bottle ml/day <strong>{{ headlines.bottle_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.bottle_ml_per_day.change|signed }}</span></li>
-      <li>Pump ml/day <strong>{{ headlines.pump_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.pump_ml_per_day.change|signed }}</span></li>
-      <li>Sleep h/day <strong>{{ headlines.sleep_hours_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.sleep_hours_per_day.change|signed }}</span></li>
-      <li>Time between feeds <strong>{{ feed_gap_seconds|gap }}</strong></li>
+      <li><span class="stat-label">Diapers/day</span> <strong>{{ headlines.diapers_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.diapers_per_day.change|signed }} vs {{ previous_label }}</span></li>
+      <li><span class="stat-label">Nursing min/day</span> <strong>{{ headlines.nursing_minutes_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.nursing_minutes_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Bottle ml/day</span> <strong>{{ headlines.bottle_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.bottle_ml_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Pump ml/day</span> <strong>{{ headlines.pump_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.pump_ml_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Sleep h/day</span> <strong>{{ headlines.sleep_hours_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.sleep_hours_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Time between feeds</span> <strong>{{ feed_gap_seconds|gap }}</strong></li>
     </ul>
   </section>
 
