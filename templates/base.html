@@ -3,12 +3,78 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="theme-color" content="#1f2433">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <title>{% block title %}Baby Tracker{% endblock %}</title>
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <link rel="icon" href="{% static 'icons/icon-192.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <script src="{% static 'js/htmx.min.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
 </head>
-<body hx-boost="true">
-  {% block content %}{% endblock %}
+<body class="{% if nav_membership %}app-shell{% endif %}">
+  {% if nav_membership %}
+    <header class="app-header">
+      <div class="avatar" aria-hidden="true">{% if nav_baby %}{{ nav_baby.name|slice:":1" }}{% else %}B{% endif %}</div>
+      <div class="who">
+        <p class="baby-name">{% if nav_baby %}{{ nav_baby.name }}{% else %}Baby{% endif %}</p>
+        <p class="when-date">{{ nav_today }}</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="icon-button" id="open-summary" aria-label="Summary"
+                hx-get="{% url 'activity-summary' %}?range=today"
+                hx-target="#summary-body"
+                hx-swap="innerHTML">
+          {% include "tracker/icon_summary.html" %}
+        </button>
+        <details class="more-menu">
+          <summary class="icon-button" aria-label="More">{% include "tracker/icon_more.html" %}</summary>
+          <div class="more-panel">
+            <a href="{% url 'timeline' %}">History ranges</a>
+            {% if can_import %}<a href="{% url 'import-home' %}">Import</a>{% endif %}
+            {% if can_admin_portal %}<a href="{% url 'portal' %}">Admin</a>{% endif %}
+          </div>
+        </details>
+      </div>
+    </header>
+  {% else %}
+    <header class="top">
+      <a class="brand" href="{% url 'login' %}">Baby Tracker</a>
+    </header>
+  {% endif %}
+  <div id="log-toast"></div>
+  <div id="save-banner" class="banner" hidden>
+    <p id="save-banner-text">Not saved</p>
+    <button type="button" data-retry>Retry</button>
+  </div>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% if nav_membership %}
+    <nav class="tabbar" aria-label="Primary">
+      <a href="{% url 'home' %}" {% if request.resolver_match.url_name == 'home' %}aria-current="page"{% endif %}>
+        <span aria-hidden="true">▣</span>Activity
+      </a>
+      <a href="{% url 'timeline' %}" {% if request.resolver_match.url_name == 'timeline' or request.resolver_match.url_name == 'timeline-day' %}aria-current="page"{% endif %}>
+        <span aria-hidden="true">☰</span>History
+      </a>
+      <a href="{% url 'trends' %}" {% if request.resolver_match.url_name == 'trends' %}aria-current="page"{% endif %}>
+        <span aria-hidden="true">▦</span>Trends
+      </a>
+      <a href="{% url 'guides' %}" {% if request.resolver_match.url_name == 'guides' %}aria-current="page"{% endif %}>
+        <span aria-hidden="true">?</span>Guides
+      </a>
+      <a href="{% url 'session-list' %}" {% if request.resolver_match.url_name == 'session-list' or request.resolver_match.url_name == 'portal' %}aria-current="page"{% endif %}>
+        <span aria-hidden="true">☺</span>Account
+      </a>
+    </nav>
+    <dialog id="summary-sheet" class="sheet-dialog">
+      <div id="summary-body"></div>
+    </dialog>
+  {% endif %}
 </body>
 </html>

@@ -1,159 +1,148 @@
 # Baby Tracker
 
-Baby Tracker is a mobile-friendly web app for shared baby care. Parents and caregivers will use one site to record diapers and breastfeeding and to read a shared timeline. Accounts are planned to be invite-only, with an admin who invites people, changes roles, and deactivates accounts.
+Baby Tracker is a phone-friendly web app for shared baby care. Parents and a caregiver sign in to one household, log diaper changes and breastfeeding, and read the same daily timeline. An admin invites people, changes roles, and deactivates accounts. A parent can also stage a Nara Baby CSV export, preview it, and commit it without creating duplicate rows.
 
-The running code is the Django skeleton from [Django project skeleton, settings and container image](https://github.com/hash167/baby_tracker/issues/7), merged in [pull request #43](https://github.com/hash167/baby_tracker/pull/43), plus local PostgreSQL, pytest, and GitHub Actions CI. The app serves a home page and `/healthz`. Accounts, diaper logging, feeding timers, the shared timeline, CSV import, and deployment are still planned. They are specified in the epics below and are not part of the app you can run today.
+Pages are server-rendered HTML with HTMX and plain JavaScript. The timer on screen is computed from timestamps saved on the server, so a reload keeps the same feed.
 
-## What the app will do
+## Accounts
 
-These behaviors are the product. They are not implemented yet.
+There is no public signup. An admin opens **Admin**, creates a one-time invite link, and shares that link. The link expires and works once. The person sets a password and joins the household as an admin, a parent, or a caregiver.
 
-- **Accounts.** Invite-only accounts for parents and caregivers. An admin manages invitations, roles, and deactivation. Authorization is checked on the server. The default policy is that parents manage every entry, and caregivers can view the shared history and add or edit their own entries.
-- **Diapers.** Each diaper event has a type (wet, dirty, both, or dry) and a timestamp.
-- **Breastfeeding.** A session records left and right sides. Start, pause, switch side, and finish are saved on the server. The on-screen timer is computed from those timestamps, so a phone lock or reload keeps the same session. A feed can also be entered by hand as time on each side.
-- **Shared timeline.** The household sees one daily history of these events.
-- **Nara Baby CSV import.** An export can be staged, validated, previewed, and committed, with duplicates skipped by source activity id. Files used in this repository will be synthetic. A real family export stays out of git, issues, and CI.
+Parents and admins can add and correct any diaper or feed. Caregivers can read the shared timeline, add entries, and edit or delete only their own. Every check is done on the server. Deactivating someone, changing their role, or choosing **Sign out everywhere** ends their existing sessions. A person can also sign out their other sessions from **Account**.
 
-The first version does not include full offline writing. The interface is server-rendered HTML, HTMX, and plain JavaScript.
+Repeated failed logins are throttled. Invitation links are the way accounts are created and the way an admin helps someone who is locked out: issue a new invite, or change the password with them present. No email provider is configured. See [docs/decisions/0001-invitation-delivery.md](docs/decisions/0001-invitation-delivery.md).
 
-## Roadmap
+## Diapers and timeline
 
-Work is grouped into three stages. The stage names match the `release:` labels on the issues. Detail lives in the epics; this is only the map.
+The timeline has large buttons for wet, dirty, both, and dry. Leave the time blank to record now, or pick a time to backdate. A double tap or a retry of the same submission stores one event. If the save does not reach the server, the page says **Not saved** and offers retry. It does not show an unsaved entry as recorded.
 
-**Accounts and diapers.** Set up the project, then add invite-only accounts and diaper events on a shared timeline. This stage also starts deployment: build and deliver an image, run the app with a private PostgreSQL database on k3s, publish HTTPS through a Cloudflare Tunnel, and export redacted OpenTelemetry. The skeleton in this repository is the beginning of that stage. The other tickets are open.
+The day is grouped in the household's timezone. Totals skip soft-deleted rows. A parent or admin can edit, delete, and restore an entry. A stale edit shows the current values instead of overwriting them. **History** lists who changed the entry and when.
 
-**Feeding.** Add breastfeeding: server-persisted left and right timers, manual per-side entries, and feeding summaries on the timeline. A check on a real phone is planned once the timer and the public HTTPS route exist, together with an installable page.
+While the timeline tab is visible it polls for changes from other devices and refreshes when you come back to it. Hidden tabs do not poll.
 
-**Import and launch.** Add the Nara Baby CSV import (preview, deduplication, and a batch rollback), then the launch work: Honeycomb dashboards and alarms, an external availability check, encrypted backups with a restore drill, and a release smoke-check list.
+## Breastfeeding
 
-Deployment and telemetry start during accounts and diapers. They are not deferred until launch. The phone check sits with feeding. Dashboards, the external check, backups, and the launch list sit with import and launch. That split is described in the deployment epic.
+**Feed** starts a left or right timer, and can pause, switch side, or finish. Elapsed time is computed in the browser from the segment timestamps, corrected by the server clock. The server is contacted on those actions and on a slow refresh, not every second. Reloading the page, or opening the feed on another device, shows the same session. Only one unfinished feed can exist for a baby.
 
-## Epics
+**Enter a finished feed** records minutes on each side. Use 0 for a side that was not used. A blank duration is not the same thing as zero. Feeds that pass local midnight count on the day they started. Today's card shows per-side totals, the last side, and how long it has been since the last feed started and ended.
 
-| Epic | Stage |
-| --- | --- |
-| [Epic: Project foundation & CI](https://github.com/hash167/baby_tracker/issues/1) | Accounts and diapers. Project skeleton, planned PostgreSQL for tests and deployment, core models, CI, security scanning, and baseline telemetry. |
-| [Epic: Accounts & access](https://github.com/hash167/baby_tracker/issues/2) | Accounts and diapers. Invite-only login, admin / parent / caregiver roles, and session revocation. |
-| [Epic: Diaper tracking & shared timeline](https://github.com/hash167/baby_tracker/issues/3) | Accounts and diapers. Diaper types and timestamps, corrections, and a shared daily timeline. |
-| [Epic: Breastfeeding tracking](https://github.com/hash167/baby_tracker/issues/4) | Feeding. Left/right sessions stored on the server, a plain JavaScript timer, and manual entries. |
-| [Epic: Nara Baby CSV import](https://github.com/hash167/baby_tracker/issues/5) | Import and launch. Previewable, deduplicated import. Fixtures in the repo stay synthetic. |
-| [Epic: Deployment, observability & reliability](https://github.com/hash167/baby_tracker/issues/6) | Starts in accounts and diapers (k3s, tunnel, baseline telemetry). Phone validation is in feeding. Dashboards, alarms, backups, and launch checks are in import and launch. |
+## Nara Baby import
 
-## Stack
+**Import** accepts a CSV shaped like a Nara Baby export. The original file is stored in PostgreSQL and removed after the retention period, so any app replica can download it. Staging does not change the timeline. The preview groups rows by type and lists warnings: timestamp mismatches, unknown values, missing units, and duplicate ids in the file. Caregiver names in the file can be mapped to someone who already has an account, or left as attribution text. The import does not create accounts.
 
-The agreed stack is Python and Django. Pages are rendered on the server. The browser stack is HTMX and plain JavaScript. HTMX is the vendored file [`static/js/htmx.min.js`](static/js/htmx.min.js). [`templates/base.html`](templates/base.html) loads that file and [`static/js/app.js`](static/js/app.js), and sets `hx-boost="true"` on the page body. `app.js` is empty, and the diaper, feeding, and import screens are still to be built. The app has no Node.js build, no Next.js app, and no TypeScript. The Playwright harness in [`e2e/`](e2e/) is plain TypeScript and is only for browser tests.
+Committing writes diapers and finished feeds, including per-side totals and the start and end side. It does not invent a left/right switch sequence. Sleep, growth, and medical rows are kept and listed under **Account → Archived import records**. A second import of the same file adds nothing. A changed row is applied only when you choose **Apply update**. **Roll back** removes that batch. If someone edited an imported row afterward, the rollback asks whether to keep or remove that edit. Other entries are left alone.
 
-PostgreSQL 16 is the database for local development, pytest, and production settings. SQLite is not supported; settings call `require_postgresql()` and raise if the engine is anything else. Local settings may use compose-compatible `POSTGRES_*` defaults. Production settings require `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_HOST` — there are no silent production defaults. See [issue #8](https://github.com/hash167/baby_tracker/issues/8).
-
-Versions locked in [`uv.lock`](uv.lock) today:
-
-- Python 3.15 ([`.python-version`](.python-version); `requires-python` is `>=3.15` in [`pyproject.toml`](pyproject.toml))
-- Django 6.1.3
-- django-htmx 1.29.0
-- gunicorn 26.2.0
-- WhiteNoise 6.12.0
-- psycopg 3.3.x
-- django-debug-toolbar 8.0.0, pytest, pytest-django, factory-boy, and ruff in the `dev` group
+The column layout the parser expects is described in [docs/nara_csv_format.md](docs/nara_csv_format.md). Files in this repository are synthetic. A real family export stays off this repo, off issues, and off CI. Checking a real export is a private step described in [docs/runbooks/private-import.md](docs/runbooks/private-import.md).
 
 ## Run it locally
 
-Install [uv](https://docs.astral.sh/uv/), Python 3.15, and Docker. From the repository root, start PostgreSQL 16, then the app:
+Install [uv](https://docs.astral.sh/uv/), Python 3.15, and Docker. From the repository root:
+
+```bash
+docker compose up --build
+```
+
+That starts PostgreSQL 16, runs migrations as their own step, then serves the app at `http://127.0.0.1:8000`. The compose database name, user, and password are the local development values `baby_tracker`. They are not production credentials.
+
+Create the first household when you are ready. The first run exits if any value is missing. A later run exits 0 when a household or that admin already exists and does not change the existing password:
+
+```bash
+export BOOTSTRAP_ADMIN_USERNAME=...
+export BOOTSTRAP_ADMIN_PASSWORD=...
+export BOOTSTRAP_ADMIN_EMAIL=...
+export BOOTSTRAP_HOUSEHOLD_NAME=...
+export BOOTSTRAP_BABY_NAME=...
+export BOOTSTRAP_TIMEZONE=America/Los_Angeles
+docker compose exec app python manage.py bootstrap_household
+```
+
+For tests and day-to-day development without rebuilding the image:
 
 ```bash
 docker compose up -d --wait db
 uv sync
-uv run python manage.py check
 uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-`uv sync` installs the locked dependencies, including the `dev` group. Local settings import `debug_toolbar`, so leave that group installed. [`manage.py`](manage.py) sets `DJANGO_SETTINGS_MODULE` to `config.settings.local`. Local defaults match compose (`POSTGRES_HOST=127.0.0.1`, database/user/password `baby_tracker`). Copy [`.env.example`](.env.example) to `.env` only when you need overrides. When `DJANGO_SECRET_KEY` is unset, local settings use a development-only key. Allowed hosts are `localhost` and `127.0.0.1`. The local email backend writes to the console. Compose publishes Postgres on `127.0.0.1:5432` only (not on all interfaces).
-
-`migrate` applies Django's built-in tables to PostgreSQL. The `tracker` app has no models yet.
-
-`psycopg` loads the system `libpq` shared library (there is no usable `psycopg-binary` wheel for Python 3.15 yet):
+`psycopg` loads the system `libpq` library (there is no usable `psycopg-binary` wheel for Python 3.15 yet):
 
 - **Debian/Ubuntu:** `sudo apt-get install -y libpq5`
-- **macOS:** `brew install libpq`, then put the keg-only library on the linker fallback path before `uv run`:
+- **macOS:** `brew install libpq`, then:
 
 ```bash
 export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix libpq)/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 ```
 
-[`scripts/test.sh`](scripts/test.sh) sets that macOS path automatically when Homebrew `libpq` is installed.
+[`scripts/test.sh`](scripts/test.sh) sets that macOS path when Homebrew `libpq` is installed.
 
-`runserver` listens on `http://127.0.0.1:8000`.
+`GET /healthz` returns `ok` and does not touch the database. `GET /readyz` returns `ok` when PostgreSQL answers `SELECT 1`, and `unavailable` with HTTP 503 otherwise. Neither response includes connection details.
 
-- `/` renders the skeleton home page, [`templates/tracker/home.html`](templates/tracker/home.html). The heading is "Home" and the document title is "Home · Baby Tracker".
-- `/healthz` returns plain text `ok` and does not query the database. Middleware answers this path before host and HTTPS checks.
-- `/admin/` is Django's built-in admin. No baby-care models are registered. The planned admin screens for invitations, roles, and deactivation are separate work and are not built.
+## Configuration
 
-`uv run python manage.py check` is Django's system check. It does not test product behavior.
+Settings come from the environment. Names are listed in [`.env.example`](.env.example). Do not commit a `.env` file.
 
-## Container image
+Production requires `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_HOST`. Behind the Cloudflare Tunnel, also set `DJANGO_BEHIND_PROXY=true` and `DJANGO_CSRF_TRUSTED_ORIGINS=https://baby.thewalawalas.com`. That turns on the HTTPS redirect, secure cookies, HSTS, and the proxy header together. `/healthz` and `/readyz` stay exempt from the redirect so probes can use HTTP inside the cluster.
 
-The optional image uses production settings and requires a reachable PostgreSQL. It is not a k3s deploy.
-
-```bash
-docker compose up -d --wait db
-docker build -t baby-tracker .
-docker run --rm -p 8000:8000 \
-  --add-host=host.docker.internal:host-gateway \
-  -e DJANGO_SECRET_KEY=change-me \
-  -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
-  -e POSTGRES_HOST=host.docker.internal \
-  -e POSTGRES_PORT=5432 \
-  -e POSTGRES_DB=baby_tracker \
-  -e POSTGRES_USER=baby_tracker \
-  -e POSTGRES_PASSWORD=baby_tracker \
-  baby-tracker
-```
-
-The [Dockerfile](Dockerfile) sets `DJANGO_SETTINGS_MODULE=config.settings.production` and installs `libpq5`. [`config/wsgi.py`](config/wsgi.py) and [`config/asgi.py`](config/asgi.py) default to that module as well. Production settings require `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and explicit `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_HOST`. [`docker/entrypoint.sh`](docker/entrypoint.sh) drops to the `app` user, then [`docker/migrate.py`](docker/migrate.py) waits for Postgres, takes a PostgreSQL advisory lock, runs migrations, and releases the lock before gunicorn starts (`config.wsgi:application`, port 8000, one worker).
-
-`GET /healthz` on the published port returns `ok`.
-
-Set `DJANGO_BEHIND_PROXY=true` only when a TLS-terminating proxy overwrites `X-Forwarded-Proto` and clients cannot reach gunicorn's port directly. The flag turns on the secure proxy header, the HTTPS redirect, and secure cookies together. `/healthz` is exempt from that redirect.
-
-Names and placeholders for these variables are in [`.env.example`](.env.example). Do not commit `.env`.
-
-## Planned hosting and operations
-
-None of this is configured in the repository.
-
-The intended layout is a single app container and a private PostgreSQL database on k3s. Public HTTPS is planned through an existing Cloudflare Tunnel. The planned address is `https://baby.thewalawalas.com`. That hostname is a target in the deployment epic. It was not checked as a live site while writing this file.
-
-OpenTelemetry is planned to export to Honeycomb, with alarms for sustained failures and a separate external availability check. Traces must leave out names, notes, feeding contents, and import contents. Dashboards, that external check, encrypted backups with a restore drill, and the launch checklist are tracked in [Epic: Deployment, observability & reliability](https://github.com/hash167/baby_tracker/issues/6).
+OpenTelemetry traces are exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set. The app does not read a vendor API key. Span names use route templates. The export filter keeps method, status, route, database operation, error class, and the low-cardinality fields `app.event_type`, `app.outcome`, and `app.role`. An unreachable collector does not fail the request. The in-cluster collector and the Honeycomb key are described in [docs/runbooks/observability.md](docs/runbooks/observability.md).
 
 ## Tests
 
-pytest and pytest-django run against PostgreSQL only (test DB created and destroyed each run; do not pass `--reuse-db` unless you intend to keep it).
+pytest and pytest-django run against PostgreSQL only. The test database is created and destroyed each run.
 
 ```bash
 ./scripts/test.sh
-# or, with Postgres already up:
-uv run pytest
 ```
 
-[`tests/test_database_engine.py`](tests/test_database_engine.py) asserts the engine is PostgreSQL and that SQLite is rejected. [`tests/test_db_concurrency.py`](tests/test_db_concurrency.py) commits a synthetic user and reads it on a second DB connection (`transaction=True`). [`tests/factories.py`](tests/factories.py) builds caregivers, households, babies, and events with Faker names and `@example.com` emails. Household, baby, and event factories are in-memory until the core models in [issue #11](https://github.com/hash167/baby_tracker/issues/11) exist. Caregivers are Django users. Tests and factories use synthetic data only.
-
-Playwright needs Node.js 22. It loads Django's admin login at `/admin/login/` (the product login page is still planned). Start PostgreSQL, migrate, and `runserver`, then:
+Playwright is plain JavaScript and needs Node.js 22. Seed the synthetic household, start the app, then run the browser tests:
 
 ```bash
+uv run python manage.py seed_e2e
+TIMELINE_POLL_MS=1000 uv run python manage.py runserver 127.0.0.1:8000
 ./scripts/e2e.sh
 ```
 
+The seeded usernames are `synth_admin`, `synth_parent`, and `synth_caregiver`. The shared test password is the one in [`tests/factories.py`](tests/factories.py). These accounts exist only for tests.
+
+## Container image and deployment
+
+Build the image:
+
+```bash
+docker build -t baby-tracker .
+```
+
+The image runs gunicorn and WhiteNoise. It does not migrate on startup and it does not contain a secret. Apply migrations with:
+
+```bash
+python /app/docker/migrate.py
+```
+
+Kubernetes manifests are in [`deploy/k8s/`](deploy/k8s/). They create the `baby-tracker` namespace, a private PostgreSQL 16 StatefulSet, the app Deployment and NodePort Service, a migration Job, and a backup CronJob. The bootstrap Job is a separate one-off (`deploy/k8s/bootstrap-job.yaml`), not part of that kustomization. Node addresses are a separate overlay at [`deploy/overlays/nodeport/`](deploy/overlays/nodeport/). The collector manifest is optional. Secrets are referenced by name (`baby-tracker-app`, `baby-tracker-db`, `baby-tracker-backup`, `baby-tracker-bootstrap` for the bootstrap password only, and `baby-tracker-otel` only if you run the collector). The manifests do not contain secret values. Probes use `/readyz` for readiness and `/healthz` for liveness and do not set a Host header. A database outage removes the pod from the Service without a restart loop. Building the image and importing it into k3s with no registry is described in [docs/runbooks/deploy-k3s.md](docs/runbooks/deploy-k3s.md).
+
+GitHub Actions builds the image on every pull request. A push to `main` publishes `ghcr.io/hash167/baby_tracker:<commit sha>`. The cluster pulls that image. GitHub does not receive a kubeconfig. See [docs/decisions/0002-image-delivery.md](docs/decisions/0002-image-delivery.md) and [docs/runbooks/rollback.md](docs/runbooks/rollback.md).
+
+The intended public address is `https://baby.thewalawalas.com`, through the existing Cloudflare Tunnel, pointing at `http://baby-tracker.baby-tracker.svc.cluster.local:8000`. The tunnel change itself is made in the tunnel's own configuration, not in this repo. See [docs/runbooks/cloudflare-tunnel.md](docs/runbooks/cloudflare-tunnel.md).
+
+Encrypted backups, the restore drill, and the launch checklist are in [docs/runbooks/restore.md](docs/runbooks/restore.md) and [docs/runbooks/release-checklist.md](docs/runbooks/release-checklist.md).
+
 ## Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. A temporary PostgreSQL 16 service backs pytest, migration checks, and Playwright. No GitHub Actions secrets are used. The database user, name, and password are the same public local values as [`docker-compose.yml`](docker-compose.yml).
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and on pushes to `main`. A temporary PostgreSQL 16 service backs pytest, migration checks, and Playwright. The database user, name, and password are the same public local values as compose.
 
 | Status check | Fails when |
 | --- | --- |
 | `CI / lint` | `ruff check` or `ruff format --check` fails |
-| `CI / pytest` | pytest fails against that PostgreSQL service |
-| `CI / migrations` | `makemigrations --check` finds a missing migration, or `migrate` from an empty database fails |
-| `CI / playwright` | the Playwright login-page smoke test fails |
+| `CI / pytest` | pytest fails against PostgreSQL |
+| `CI / migrations` | a migration is missing, or `migrate` from an empty database fails |
+| `CI / playwright` | a browser test fails |
+| `CI / dependency-audit` | `pip-audit` reports a known vulnerability in `uv.lock` |
+| `CI / bandit` | Bandit reports an issue in first-party Python |
+| `CI / deploy-check` | `manage.py check --deploy` fails |
+| `CI / secrets` | gitleaks, the data-file guard, or pre-commit fails |
+| `CI / manifests` | kubeconform rejects `deploy/k8s/` |
+| `CI / image` | `docker build` fails |
 
-A pull request with a failing unit test, a missing migration, or a failing Playwright test fails CI. Playwright uploads `e2e/test-results/` (traces and failure screenshots) only after a browser failure. Those artifacts are the login page, not household data.
+## Stack
 
-These four names are the required status checks. Enabling them in branch protection is a repository setting and is not part of this change.
+Python 3.15, Django 6.1, PostgreSQL 16, HTMX 2 (vendored at [`static/js/htmx.min.js`](static/js/htmx.min.js)), WhiteNoise, and gunicorn. Tests use pytest, pytest-django, and Playwright. There is no Node.js application build and no TypeScript.

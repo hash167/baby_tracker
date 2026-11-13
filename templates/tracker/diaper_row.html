@@ -1,0 +1,12 @@
+{% load care %}
+<li class="{% if row.note %}has-note{% endif %}">
+  <a class="act-line" href="{% url 'event-edit' row.pk %}">
+    <span class="when">{{ row.clock }}</span>
+    <strong class="diaper-type diaper-{{ row.type }}">
+      <span class="diaper-mark" aria-hidden="true">{{ row.type|diaper_mark }}</span>
+      <span class="diaper-label">{{ row.label }}</span>
+    </strong>
+    <span class="chevron" aria-hidden="true">›</span>
+  </a>
+  {% if row.detail or row.note %}<p class="row-note">{{ row.detail }}{% if row.detail and row.note %} · {% endif %}{{ row.note }}</p>{% endif %}
+</li>

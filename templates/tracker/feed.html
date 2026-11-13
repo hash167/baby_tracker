@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Feed · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Breastfeeding</h1>
+  <p><a href="{% url 'feed-manual' %}">Enter a finished feed</a></p>
+  {% include "tracker/feed_panel.html" %}
+</section>
+{% endblock %}

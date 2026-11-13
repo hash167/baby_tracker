@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Activity · Baby Tracker{% endblock %}
+
+{% block content %}
+<section id="activity"
+         data-poll-ms="{{ poll_ms }}"
+         data-marker="{{ marker }}"
+         data-marker-url="{% url 'timeline-marker' %}"
+         data-partial-url="{% url 'activity-partial' %}">
+  {% if feed %}
+    {% include "tracker/activity_cards.html" %}
+  {% else %}
+    <p>No baby in this household yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

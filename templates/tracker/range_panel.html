@@ -1,0 +1,43 @@
+{% load care %}
+<div data-range="{{ range_key }}">
+  <div class="range-switch" role="group" aria-label="Time range">
+    {% for key, label in range_choices %}
+      <a href="{% url 'timeline' %}?range={{ key }}"
+         hx-get="{% url 'timeline-partial' %}?range={{ key }}"
+         hx-target="#range-panel"
+         hx-swap="innerHTML"
+         hx-push-url="{% url 'timeline' %}?range={{ key }}"
+         {% if range_key == key %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <section class="summary-card" id="range-summary" aria-label="{{ range_label }}">
+    <h2>{{ range_label }}</h2>
+    <p><strong>Diapers</strong> <span id="diaper-total">{{ summary.diapers.total }}</span></p>
+    <p>
+      Wet {{ summary.diapers.wet }},
+      Dirty {{ summary.diapers.dirty }},
+      Wet + dirty {{ summary.diapers.both }},
+      Dry {{ summary.diapers.dry }}
+    </p>
+    <p><strong>Feeds</strong> <span id="feed-total">{{ summary.feeds.total }}</span></p>
+    <p>
+      Left {{ summary.feeds.left|duration }},
+      Right {{ summary.feeds.right|duration }},
+      Total {{ summary.feeds.duration|duration }}
+    </p>
+    <p><strong>Bottle feeds</strong> <span id="bottle-total">{{ summary.bottles.total }}</span></p>
+    <p>Total <span id="bottle-volume">{{ summary.bottles.volume_ml|ml }}</span></p>
+    <p><strong>Pumps</strong> <span id="pump-total">{{ summary.pumps.total }}</span></p>
+    <p>Total <span id="pump-volume">{{ summary.pumps.volume_ml|ml }}</span></p>
+    <ul class="kind-counts">
+      {% for item in summary.other %}
+        <li>{{ item.label }} <span data-kind="{{ item.kind }}">{{ item.count }}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <div id="timeline">
+    {% include "tracker/timeline_partial.html" %}
+  </div>
+</div>

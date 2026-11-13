@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from pathlib import Path
 
 import django
 from django.core.management import call_command
@@ -32,10 +33,23 @@ def wait_for_database() -> None:
             last_error = exc
             connection.close()
             time.sleep(READY_INTERVAL)
-    raise SystemExit(f'PostgreSQL not ready after {READY_TIMEOUT}s: {last_error}')
+    kind = type(last_error).__name__ if last_error else 'timeout'
+    raise SystemExit(f'PostgreSQL not ready after {READY_TIMEOUT}s ({kind})')
+
+
+def _ensure_project_root() -> None:
+    """Make `config` importable when this file is run by path.
+
+    `python /app/docker/migrate.py` puts `/app/docker` on `sys.path`, not `/app`.
+    The Kubernetes Job uses that command and does not set PYTHONPATH.
+    """
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
 
 def main() -> int:
+    _ensure_project_root()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
     django.setup()
     wait_for_database()

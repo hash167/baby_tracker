@@ -1,0 +1,9 @@
+Type,Profile Name,Start Date/time,Start Date/time (Epoch),End Date/time,End Date/time (Epoch),Created By Caregiver,Last Updated By Caregiver,Note,Time Zone,_familyKey,_profileKey,_activityKey,[Profile] Birth Date,[Profile] Birth Date (Adjusted),[Profile] Sex,[Profile] Type,[Breastfeed] Start Side,[Breastfeed] End Side,[Breastfeed] Left Duration,[Breastfeed] Right Duration,[Breastfeed] Duration Unit,[Diaper] Status,[Sleep] End Date/time,[Growth] Weight,[Growth] Weight Unit,[Growth] Height,[Growth] Height Unit,[Growth] Head,[Growth] Head Unit,[Medical] Name,[Medical] Dose,[Medical] Dose Unit,[Temperature] Value,[Temperature] Unit,[Photo] Filename
+Profile,Synth Baby,,,,,,,,UTC,fam-1,prof-1,act-profile,2026-01-02,,unspecified,child,,,,,,,,,,,,,,,,,,,
+Diaper,Synth Baby,2026-06-15 15:00:00,1781535600000,,,Caregiver One,Caregiver One,synthetic note,UTC,fam-1,prof-1,act-diaper-1,,,,,,,,,,Wet,,,,,,,,,,,,,
+Breastfeed,Synth Baby,2026-06-15 16:00:00,1781539200000,2026-06-15 16:20:00,1781540400000,Caregiver One,Caregiver One,,UTC,fam-1,prof-1,act-feed-1,,,,,Left,Right,600,300,s,,,,,,,,,,,,,,
+Sleep,Synth Baby,2026-06-15 18:00:00,1781546400000,2026-06-15 19:00:00,1781550000000,Caregiver Two,Caregiver Two,,UTC,fam-1,prof-1,act-sleep-1,,,,,,,,,,,,,,,,,,,,,,,
+Growth,Synth Baby,2026-06-16 12:00:00,1781611200000,,,Caregiver One,Caregiver One,,UTC,fam-1,prof-1,act-growth-1,,,,,,,,,,,,4.2,kg,54,cm,36,cm,,,,,,
+Medical,Synth Baby,2026-06-16 13:00:00,1781614800000,,,Caregiver One,Caregiver One,,UTC,fam-1,prof-1,act-med-1,,,,,,,,,,,,,,,,,,Vitamin,1,ml,,,
+Diaper,Synth Baby,2026-06-16 14:00:00,1781618400000,,,Caregiver One,Caregiver One,,UTC,fam-1,prof-1,act-unknown-diaper,,,,,,,,,,Sparkly,,,,,,,,,,,,,
+Breastfeed,Synth Baby,2026-06-16 15:00:00,1781622000000,,,Caregiver One,Caregiver One,,UTC,fam-1,prof-1,act-feed-zero,,,,,Left,,0,,s,,,,,,,,,,,,,,

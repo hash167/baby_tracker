@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Guides · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Guides</h1>
+  <ul class="events">
+    <li><a href="{% url 'import-home' %}">Import a CSV</a></li>
+    <li><a href="{% url 'feed' %}">Breastfeed timer</a></li>
+    <li><a href="{% url 'timeline' %}">History and ranges</a></li>
+    {% if can_admin_portal %}<li><a href="{% url 'portal' %}">Household admin</a></li>{% endif %}
+  </ul>
+</section>
+{% endblock %}

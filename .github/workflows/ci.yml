@@ -1,5 +1,7 @@
 # Required status checks: CI / lint, CI / pytest, CI / migrations, CI / playwright.
-# Branch protection is a repository setting and is not configured here.
+# Security jobs below also fail this workflow: dependency-audit, bandit,
+# deploy-check, secrets, manifests, and image. Branch protection is a repository setting and is
+# not configured here.
 # Credentials match docker-compose.yml. They are local/dev values, not production secrets.
 name: CI
 
@@ -150,9 +152,13 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Migrate and start the app
+      - name: Migrate, seed, and start the app
+        env:
+          TIMELINE_POLL_MS: "1000"
+          DJANGO_DEBUG_TOOLBAR: "0"
         run: |
           uv run python manage.py migrate --noinput
+          uv run python manage.py seed_e2e
           uv run python manage.py runserver 127.0.0.1:8000 --noreload > /tmp/runserver.log 2>&1 &
           for _ in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/healthz >/dev/null; then
@@ -178,3 +184,147 @@ jobs:
             e2e/playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Audit locked dependencies
+        run: ./scripts/audit_dependencies.sh
+
+  bandit:
+    name: bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Bandit
+        run: ./scripts/bandit.sh
+
+  deploy-check:
+    name: deploy-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libpq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq5
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python and dependencies
+        run: |
+          uv python install
+          uv sync --frozen
+      - name: Django check --deploy
+        run: ./scripts/deploy_check.sh
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Scan working tree and full git history
+        run: ./scripts/scan_secrets.sh
+      - name: Block CSV exports and database dumps
+        run: python3 scripts/forbid_data_files.py --all
+      - name: Pre-commit hooks
+        run: uvx pre-commit==4.7.0 run --all-files
+
+  manifests:
+    name: manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kubeconform /usr/local/bin/kubeconform
+      - name: Lint Kubernetes manifests
+        run: |
+          find deploy/k8s deploy/overlays -name '*.yaml' \
+            ! -name 'kustomization.yaml' \
+            -print0 | xargs -0 kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas
+      - name: Install kubectl
+        run: |
+          curl -sL -o kubectl "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          kubectl version --client
+      - name: Render base and nodeport overlay
+        run: |
+          kubectl kustomize deploy/k8s > /tmp/base.yaml
+          kubectl kustomize deploy/overlays/nodeport > /tmp/nodeport.yaml
+          kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas /tmp/base.yaml /tmp/nodeport.yaml
+          python3 - <<'PY'
+          from pathlib import Path
+          base = Path('/tmp/base.yaml').read_text()
+          overlay = Path('/tmp/nodeport.yaml').read_text()
+          if 'name: baby-tracker-bootstrap' in base:
+              raise SystemExit('bootstrap Job must stay out of the base kustomization')
+          if 'NODE1' not in overlay:
+              raise SystemExit('nodeport overlay did not patch allowed hosts')
+          if 'baby-tracker.baby-tracker.svc.cluster.local' not in overlay:
+              raise SystemExit('nodeport overlay dropped the service DNS name')
+          PY
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: baby_tracker
+          POSTGRES_USER: baby_tracker
+          POSTGRES_PASSWORD: baby_tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U baby_tracker -d baby_tracker"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build -t baby-tracker:ci .
+      - name: Check pg_dump major
+        run: |
+          version="$(docker run --rm --entrypoint pg_dump baby-tracker:ci --version)"
+          echo "$version"
+          printf '%s' "$version" | python3 -c 'import re,sys; text=sys.stdin.read(); match=re.search(r"PostgreSQL\)\s+(\d+)", text); major=int(match.group(1)) if match else 0; sys.exit(0 if major >= 16 else f"pg_dump major {major} cannot dump PostgreSQL 16")'
+      - name: Migrate the way the Kubernetes Job does
+        run: |
+          docker run --rm --network host \
+            -e PYTHONPATH=/tmp/not-the-app \
+            -e DJANGO_SECRET_KEY=ci-not-a-production-secret \
+            -e DJANGO_ALLOWED_HOSTS=localhost \
+            -e POSTGRES_HOST=127.0.0.1 \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=baby_tracker \
+            -e POSTGRES_USER=baby_tracker \
+            -e POSTGRES_PASSWORD=baby_tracker \
+            --entrypoint python \
+            baby-tracker:ci /app/docker/migrate.py

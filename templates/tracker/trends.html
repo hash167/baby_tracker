@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Trends · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Trends</h1>
+  <p class="muted">Days follow the household timezone. Empty days stay at zero.</p>
+  <div id="trends-panel">
+    {% include "tracker/trends_panel.html" %}
+  </div>
+</section>
+{% endblock %}

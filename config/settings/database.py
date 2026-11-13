@@ -11,10 +11,12 @@ from django.core.exceptions import ImproperlyConfigured
 
 POSTGRES_ENGINE = 'django.db.backends.postgresql'
 
+# Public local compose credential. Production does not use this default.
+_LOCAL_DB_PASSWORD = 'baby_tracker'  # nosec B105
 _LOCAL_DEFAULTS = {
     'POSTGRES_DB': 'baby_tracker',
     'POSTGRES_USER': 'baby_tracker',
-    'POSTGRES_PASSWORD': 'baby_tracker',
+    'POSTGRES_PASSWORD': _LOCAL_DB_PASSWORD,
     'POSTGRES_HOST': '127.0.0.1',
 }
 

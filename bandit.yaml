@@ -1,0 +1,14 @@
+# Static analysis for first-party code. Do not add global test-id skips.
+# B101 (assert) is skipped only in test modules because pytest uses assert.
+exclude_dirs:
+  - .venv
+  - e2e
+  - node_modules
+  - static
+  - staticfiles
+  - .git
+assert_used:
+  skips:
+    - '*test_*.py'
+    - '*tests.py'
+    - '*/tests/*'

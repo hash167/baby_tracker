@@ -1,0 +1,60 @@
+# In-cluster collector. The Honeycomb key comes from the environment, not this file.
+# The app exports to this collector and does not hold a vendor key.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  transform/allowlist:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "db.system", "db.operation", "error.type", "app.event_type", "app.outcome", "app.role"])
+          - delete_key(attributes, "http.url")
+          - delete_key(attributes, "url.full")
+          - delete_key(attributes, "url.query")
+          - delete_key(attributes, "url.path")
+          - delete_key(attributes, "db.statement")
+          - delete_key(attributes, "db.query.text")
+          - delete_key(attributes, "user.email")
+          - delete_key(attributes, "user.name")
+          - delete_key(attributes, "user.id")
+  batch:
+    timeout: 5s
+    send_batch_size: 256
+
+exporters:
+  otlphttp/honeycomb:
+    endpoint: https://api.honeycomb.io
+    headers:
+      x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 1000
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/allowlist, batch]
+      exporters: [otlphttp/honeycomb]

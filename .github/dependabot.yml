@@ -1,0 +1,23 @@
+# Issue #10. Python dependencies are locked with uv (pyproject.toml + uv.lock).
+# Dependabot's uv ecosystem is the updater for that lockfile. The pip ecosystem
+# does not read uv.lock, so a pip entry would not scan this project.
+# Docker image pins and GitHub Actions are included. The Playwright npm lock
+# under e2e/ is outside this issue.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

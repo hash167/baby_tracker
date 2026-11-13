@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Admin · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Household admin</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if invite_link %}
+    <p>Share this one-time link. It is not shown again.</p>
+    <p id="invite-link"><a href="{{ invite_link }}">{{ invite_link }}</a></p>
+  {% endif %}
+  <h2>Invite</h2>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="invite">
+    <label>Email
+      <input name="email" type="email" required>
+    </label>
+    <label>Role
+      <select name="role">
+        {% for value, label in roles %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Create invite link</button>
+  </form>
+  <h2>Timezone</h2>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="timezone">
+    <label>IANA timezone
+      <input name="timezone" value="{{ nav_membership.household.timezone }}" required>
+    </label>
+    <button type="submit">Save timezone</button>
+  </form>
+  <h2>Members</h2>
+  <ul class="events">
+    {% for member in members %}
+      <li>
+        <form method="post" action="{% url 'portal-member' member.pk %}">
+          {% csrf_token %}
+          <p>{{ member.user.username }} · {{ member.user.email }}</p>
+          <label>Role
+            <select name="role">
+              {% for value, label in roles %}
+                <option value="{{ value }}" {% if member.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label><input type="checkbox" name="is_active" value="1" {% if member.is_active %}checked{% endif %}> Active</label>
+          <button type="submit" name="action" value="save">Save member</button>
+          <button type="submit" name="action" value="sign-out">Sign out everywhere</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

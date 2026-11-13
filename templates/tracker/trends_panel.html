@@ -1,0 +1,34 @@
+{% load care %}
+<div data-trend-days="{{ days }}">
+  <div class="range-switch" role="group" aria-label="Trend range">
+    {% for length in lengths %}
+      <a href="{% url 'trends' %}?days={{ length }}"
+         hx-get="{% url 'trends-partial' %}?days={{ length }}"
+         hx-target="#trends-panel"
+         hx-swap="innerHTML"
+         hx-push-url="{% url 'trends' %}?days={{ length }}"
+         {% if days == length %}aria-current="page"{% endif %}>{{ length }} days</a>
+    {% endfor %}
+  </div>
+
+  <section class="summary-card" aria-label="{{ label }}">
+    <h2>{{ label }}</h2>
+    <ul class="kind-counts">
+      <li><span class="stat-label">Diapers/day</span> <strong>{{ headlines.diapers_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.diapers_per_day.change|signed }} vs {{ previous_label }}</span></li>
+      <li><span class="stat-label">Nursing min/day</span> <strong>{{ headlines.nursing_minutes_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.nursing_minutes_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Bottle ml/day</span> <strong>{{ headlines.bottle_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.bottle_ml_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Pump ml/day</span> <strong>{{ headlines.pump_ml_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.pump_ml_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Sleep h/day</span> <strong>{{ headlines.sleep_hours_per_day.current|one_decimal }}</strong> <span class="muted">{{ headlines.sleep_hours_per_day.change|signed }}</span></li>
+      <li><span class="stat-label">Time between feeds</span> <strong>{{ feed_gap_seconds|gap }}</strong></li>
+    </ul>
+  </section>
+
+  {% include "tracker/trend_chart.html" with title="Diapers per day" caption="Stacked wet, dirty, wet + dirty, and dry." chart=charts.diapers table="diapers" %}
+  {% include "tracker/trend_chart.html" with title="Breastfeeds per day" caption="One bar is one feed, including a feed with several segments." chart=charts.feeds table="feeds" %}
+  {% include "tracker/trend_chart.html" with title="Nursing minutes per day" caption="Left and right minutes." chart=charts.nursing table="nursing" %}
+  {% include "tracker/trend_chart.html" with title="Bottle feeds per day" caption="Bottle count." chart=charts.bottles table="bottles" %}
+  {% include "tracker/trend_chart.html" with title="Bottle volume per day" caption="Millilitres. Fluid ounces are converted." chart=charts.bottle_ml table="bottle_ml" %}
+  {% include "tracker/trend_chart.html" with title="Pumps per day" caption="Pump count." chart=charts.pumps table="pumps" %}
+  {% include "tracker/trend_chart.html" with title="Pump volume per day" caption="Millilitres." chart=charts.pump_ml table="pump_ml" %}
+  {% include "tracker/trend_chart.html" with title="Sleep hours per day" caption="Hours from a duration or a start and end." chart=charts.sleep table="sleep" %}
+</div>

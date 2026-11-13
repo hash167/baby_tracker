@@ -17,3 +17,5 @@ staticfiles
 .DS_Store
 node_modules
 e2e
+data
+*.sql.enc

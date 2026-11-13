@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: baby-tracker
+  namespace: baby-tracker
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: baby-tracker
+    app.kubernetes.io/component: app
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      nodePort: 30820
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baby-tracker
+  namespace: baby-tracker
+spec:
+  # Uploaded CSVs are rows in PostgreSQL (ImportFile). No imports volume.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: baby-tracker
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: baby-tracker
+        app.kubernetes.io/component: app
+    spec:
+      securityContext:
+        fsGroup: 10001
+      # Prefer different nodes. ScheduleAnyway so two replicas still start
+      # when the cluster has fewer than two ready nodes.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: baby-tracker
+                    app.kubernetes.io/component: app
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: baby-tracker
+              app.kubernetes.io/component: app
+      containers:
+        - name: app
+          image: ghcr.io/hash167/baby_tracker:REPLACE_SHA
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: baby-tracker-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: baby-tracker-app
+                  key: DJANGO_SECRET_KEY
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: baby-tracker-db
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: baby-tracker-db
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3

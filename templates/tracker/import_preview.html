@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Import preview · Baby Tracker{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Preview</h1>
+  <p>Status: {{ batch.status }}. Rows: {{ batch.summary.rows }}.</p>
+  {% if batch.profile %}
+    <p>Profile in file: {{ batch.profile.profile_name }} · birth {{ batch.profile.birth_date }}</p>
+  {% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    {% if names %}
+      <h2>Caregiver names</h2>
+      <p class="muted">Leave a name unmapped to keep it as history. This does not create an account.</p>
+      {% for name in names %}
+        <label>{{ name }}
+          <select name="map-{{ name }}">
+            <option value="">Keep as attribution</option>
+            {% for member in members %}
+              <option value="{{ member.user_id }}" {% if batch.name_map|default_if_none:"" %}{% endif %}>{{ member.user.username }} ({{ member.role }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% endfor %}
+    {% endif %}
+    <h2>Rows</h2>
+    {% regroup rows by record_type as groups %}
+    {% for group in groups %}
+      <h3>{{ group.grouper|default:"blank" }} ({{ group.list|length }})</h3>
+      <ul class="events">
+        {% for row in group.list %}
+          <li>
+            <p>Row {{ row.row_number }} · {{ row.classification }} · {{ row.disposition }}</p>
+            {% for warning in row.warnings %}
+              <p class="error">{{ warning.code }}{% if warning.readable %} readable {{ warning.readable }} epoch {{ warning.epoch }}{% endif %}{% if warning.value %} value {{ warning.value }}{% endif %}{% if warning.unit %} unit {{ warning.unit }}{% endif %}</p>
+            {% endfor %}
+            {% if row.disposition == 'changed' %}
+              <label>Changed record
+                <select name="decision-{{ row.pk }}">
+                  <option value="keep" {% if row.decision != 'apply' %}selected{% endif %}>Keep existing</option>
+                  <option value="apply" {% if row.decision == 'apply' %}selected{% endif %}>Apply update</option>
+                </select>
+              </label>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endfor %}
+    <button type="submit">Save choices</button>
+  </form>
+  {% if batch.status == 'staged' %}
+    <form method="post" action="{% url 'import-commit' batch.pk %}">
+      {% csrf_token %}
+      <label><input type="checkbox" name="skip_errors" value="1"> Skip rows with errors</label>
+      <button type="submit">Commit</button>
+    </form>
+    <form method="post" action="{% url 'import-abandon' batch.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="quiet">Abandon</button>
+    </form>
+  {% endif %}
+  {% if batch.status == 'committed' %}
+    <p><a href="{% url 'import-rollback' batch.pk %}">Roll back this batch</a></p>
+  {% endif %}
+</section>
+{% endblock %}

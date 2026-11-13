@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -34,15 +34,15 @@ def test_caregiver_is_a_synthetic_user():
 def test_household_baby_and_event_use_fake_names():
     event = EventFactory()
 
-    assert event.kind == 'synthetic'
     assert event.baby.name
     assert event.baby.household.name.endswith(' household')
     assert '\n' not in event.baby.name
     assert '@' not in event.baby.household.name
     ZoneInfo(event.baby.household.timezone)
-    assert event.occurred_at.tzinfo is timezone.utc
+    assert event.occurred_at.utcoffset() == timedelta(0)
     assert event.recorded_at == event.occurred_at
-    assert event.caregiver.email.endswith('@example.com')
+    assert event.created_by.email.endswith('@example.com')
+    assert event.household_id == event.baby.household_id
 
 
 def test_household_and_baby_factories_do_not_need_extra_rows():

@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector
+  namespace: baby-tracker
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 256
+      transform/allowlist:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "db.system", "db.operation", "error.type", "app.event_type", "app.outcome", "app.role"])
+      batch:
+        timeout: 5s
+    exporters:
+      otlphttp/honeycomb:
+        endpoint: https://api.honeycomb.io
+        headers:
+          x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+        retry_on_failure:
+          enabled: true
+        sending_queue:
+          enabled: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, transform/allowlist, batch]
+          exporters: [otlphttp/honeycomb]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: baby-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: baby-tracker
+      app.kubernetes.io/component: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: baby-tracker
+        app.kubernetes.io/component: otel-collector
+    spec:
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.128.0
+          args: ["--config=/etc/otel/collector.yaml"]
+          env:
+            - name: HONEYCOMB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: baby-tracker-otel
+                  key: HONEYCOMB_API_KEY
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: baby-tracker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: baby-tracker
+    app.kubernetes.io/component: otel-collector
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
