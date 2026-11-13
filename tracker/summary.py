@@ -141,6 +141,10 @@ def range_summary(events) -> dict:
     feed_total = 0
     left = 0
     right = 0
+    bottle_total = 0
+    bottle_ml = []
+    pump_total = 0
+    pump_ml = []
     others = {kind: 0 for kind in OTHER_KIND_LABELS}
     seen = set()
     for event in events:
@@ -158,6 +162,14 @@ def range_summary(events) -> dict:
             left += _seconds(event_left)
             right += _seconds(event_right)
             continue
+        if event.kind == Event.Kind.BOTTLE:
+            bottle_total += 1
+            _collect_ml(bottle_ml, event)
+            continue
+        if event.kind == Event.Kind.PUMP:
+            pump_total += 1
+            _collect_ml(pump_ml, event)
+            continue
         if event.kind in others:
             others[event.kind] += 1
     return {
@@ -168,11 +180,26 @@ def range_summary(events) -> dict:
             'right': right,
             'duration': left + right,
         },
+        'bottles': {
+            'total': bottle_total,
+            'volume_ml': sum(bottle_ml) if bottle_ml else None,
+        },
+        'pumps': {
+            'total': pump_total,
+            'volume_ml': sum(pump_ml) if pump_ml else None,
+        },
         'other': [
             {'kind': kind, 'label': label, 'count': others[kind]}
             for kind, label in OTHER_KIND_LABELS.items()
         ],
     }
+
+
+def _collect_ml(bucket: list, event) -> None:
+    raw = (event.archive or {}).get('volume_ml')
+    if raw is None:
+        return
+    bucket.append(float(raw))
 
 
 def latest_diaper(baby):

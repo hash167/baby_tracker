@@ -8,6 +8,8 @@
             <span class="diaper-mark" aria-hidden="true">{{ event.diaper_type|diaper_mark }}</span>
             <span class="diaper-label">{{ event.diaper_type|diaper_label }}</span>
           </strong>
+        {% elif event.kind == 'bottle' or event.kind == 'pump' %}
+          <strong class="activity-label">{{ event|activity_label }}</strong>
         {% else %}
           <strong>{{ event.get_kind_display }}</strong>
         {% endif %}

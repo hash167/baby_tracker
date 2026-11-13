@@ -5,6 +5,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test('diaper button is tappable and a failed save can be retried', async ({ page }) => {
   await login(page, 'synth_parent');
+  await page.locator('#diaper-card summary.add').click();
   const wet = page.getByRole('button', { name: 'Wet' });
   const box = await wet.boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
@@ -33,7 +34,8 @@ test('diaper button is tappable and a failed save can be retried', async ({ page
 
 test('wet and dirty diapers show their labels on the timeline', async ({ page }) => {
   await login(page, 'synth_parent');
-  const timeline = page.locator('#timeline');
+  await page.locator('#diaper-card summary.add').click();
+  const timeline = page.locator('#activity');
 
   await page.getByRole('button', { name: 'Wet' }).click();
   await expect(page.locator('#save-result')).toContainText('Saved');

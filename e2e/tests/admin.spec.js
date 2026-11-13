@@ -27,7 +27,7 @@ test('admin invite creates one account and can sign a caregiver out', async ({ b
   const caregiverContext = await browser.newContext();
   const caregiver = await caregiverContext.newPage();
   await login(caregiver, 'synth_caregiver');
-  await expect(caregiver.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+  await expect(caregiver.locator('#activity')).toBeVisible();
   const row = admin.locator('li', { hasText: 'synth_caregiver' });
   await row.getByRole('button', { name: 'Sign out everywhere' }).click();
   await caregiver.goto('/timeline/');

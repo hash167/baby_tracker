@@ -34,6 +34,9 @@ from tracker.access import (
     sign_out_everywhere,
     update_membership,
 )
+from tracker.activity import SUMMARY_LABELS, activity_board, sheet, summary_range
+from tracker.bottles import create_bottle
+from tracker.bottles import log_save_failure as log_bottle_failure
 from tracker.clock import ensure_aware, reject_if_too_far_future
 from tracker.diapers import create_diaper, log_save_failure
 from tracker.exceptions import DeletedRecord, VersionConflict
@@ -68,6 +71,8 @@ from tracker.policy import (
     can_import,
     can_restore_event,
 )
+from tracker.quicklog import create_pump, create_sleep, end_after
+from tracker.quicklog import log_save_failure as log_quick_failure
 from tracker.summary import (
     RANGE_LABELS,
     RANGE_LINKS,
@@ -82,6 +87,7 @@ from tracker.summary import (
     range_summary,
     time_since,
 )
+from tracker.trends import TREND_LENGTHS, build_trends, empty_trends, trend_length
 
 
 def _role(request) -> str:
@@ -106,7 +112,7 @@ def _require(request):
 
 def _safe_next(value: str | None) -> str:
     if not value or not value.startswith('/') or value.startswith('//'):
-        return reverse('timeline')
+        return reverse('home')
     return value
 
 
@@ -155,10 +161,62 @@ def _minutes_to_seconds(raw, field):
     return int(round(minutes * 60))
 
 
+def _activity_context(request):
+    baby = _baby(request)
+    board = activity_board(baby) if baby is not None else None
+    return {
+        'board': board,
+        'baby': baby,
+        'babies': list(request.household.babies.all()),
+        'marker': change_marker(baby) if baby else '0',
+    }
+
+
 def home(request):
-    if request.user.is_authenticated and request.membership is not None:
-        return redirect('timeline')
-    return redirect('login')
+    if not (request.user.is_authenticated and request.membership is not None):
+        return redirect('login')
+    context = _activity_context(request)
+    if context['board'] is None:
+        return render(request, 'tracker/activity.html', context)
+    context.update(context['board'])
+    return render(request, 'tracker/activity.html', context)
+
+
+@require_GET
+def activity_partial(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    context = _activity_context(request)
+    if context['board'] is not None:
+        context.update(context['board'])
+    return render(request, 'tracker/activity_cards.html', context)
+
+
+@require_GET
+def activity_summary(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    baby = _baby(request)
+    key = summary_range(request.GET.get('range'))
+    summary = sheet(baby, key) if baby is not None else None
+    return render(
+        request,
+        'tracker/summary_sheet.html',
+        {
+            'summary': summary,
+            'summary_choices': tuple(SUMMARY_LABELS.items()),
+        },
+    )
+
+
+@require_GET
+def guides(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    return render(request, 'tracker/guides.html')
 
 
 def healthz(request):
@@ -174,7 +232,7 @@ def readyz(request):
 @require_http_methods(['GET', 'POST'])
 def login_view(request):
     if request.user.is_authenticated and request.membership is not None:
-        return redirect('timeline')
+        return redirect('home')
     error = ''
     status = 200
     if request.method == 'POST':
@@ -362,6 +420,33 @@ def _timeline_context(request, day):
     }
 
 
+def _trends_context(request):
+    days = trend_length(request.GET.get('days'))
+    baby = _baby(request)
+    if baby is None:
+        report = empty_trends(request.household, days)
+    else:
+        report = build_trends(baby, days)
+    report['lengths'] = TREND_LENGTHS
+    return report
+
+
+@require_GET
+def trends(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    return render(request, 'tracker/trends.html', _trends_context(request))
+
+
+@require_GET
+def trends_partial(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    return render(request, 'tracker/trends_panel.html', _trends_context(request))
+
+
 @require_GET
 def timeline(request, day=None):
     denied = _require(request)
@@ -429,6 +514,138 @@ def select_baby(request):
     if request.household.babies.filter(pk=baby_id).exists():
         request.session['baby_id'] = baby_id
     return redirect('timeline')
+
+
+@require_POST
+def bottle_create(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    if not can_create(request.membership):
+        return HttpResponseForbidden('You cannot do that.')
+    baby = _baby(request)
+    if baby is None:
+        return HttpResponseForbidden('You cannot do that.')
+    record_functional_attributes(event_type='bottle', role=_role(request))
+    try:
+        _event, replay = create_bottle(
+            actor=request.user,
+            baby=baby,
+            bottle_type=request.POST.get('bottle_type') or '',
+            volume=request.POST.get('volume') or '',
+            unit=request.POST.get('unit') or '',
+            occurred_at=_parse_when(request),
+            idempotency_key=request.POST.get('idempotency_key') or '',
+        )
+    except ValidationError as exc:
+        record_functional_attributes(event_type='bottle', outcome='failure')
+        return render(
+            request,
+            'tracker/save_result.html',
+            {'error': ' '.join(exc.messages), 'saved': False},
+            status=400,
+        )
+    except Exception:
+        log_bottle_failure()
+        record_functional_attributes(event_type='bottle', outcome='save_failed')
+        return render(
+            request,
+            'tracker/save_result.html',
+            {'saved': False},
+            status=500,
+        )
+    record_functional_attributes(event_type='bottle', outcome='success')
+    response = render(
+        request,
+        'tracker/save_result.html',
+        {'saved': True, 'replay': replay},
+    )
+    response['HX-Trigger'] = 'refresh-timeline'
+    return response
+
+
+@require_POST
+def pump_create(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    if not can_create(request.membership):
+        return HttpResponseForbidden('You cannot do that.')
+    baby = _baby(request)
+    if baby is None:
+        return HttpResponseForbidden('You cannot do that.')
+    record_functional_attributes(event_type='pump', role=_role(request))
+    try:
+        _event, replay = create_pump(
+            actor=request.user,
+            baby=baby,
+            volume=request.POST.get('volume') or '',
+            occurred_at=_parse_when(request),
+            idempotency_key=request.POST.get('idempotency_key') or '',
+        )
+    except ValidationError as exc:
+        record_functional_attributes(event_type='pump', outcome='failure')
+        return render(
+            request,
+            'tracker/save_result.html',
+            {'error': ' '.join(exc.messages), 'saved': False},
+            status=400,
+        )
+    except Exception:
+        log_quick_failure('pump')
+        record_functional_attributes(event_type='pump', outcome='save_failed')
+        return render(request, 'tracker/save_result.html', {'saved': False}, status=500)
+    record_functional_attributes(event_type='pump', outcome='success')
+    response = render(
+        request,
+        'tracker/save_result.html',
+        {'saved': True, 'replay': replay},
+    )
+    response['HX-Trigger'] = 'refresh-timeline'
+    return response
+
+
+@require_POST
+def sleep_create(request):
+    denied = _require(request)
+    if denied:
+        return denied
+    if not can_create(request.membership):
+        return HttpResponseForbidden('You cannot do that.')
+    baby = _baby(request)
+    if baby is None:
+        return HttpResponseForbidden('You cannot do that.')
+    record_functional_attributes(event_type='sleep', role=_role(request))
+    try:
+        start = _parse_when(request)
+        _event, replay = create_sleep(
+            actor=request.user,
+            baby=baby,
+            occurred_at=start,
+            ended_at=end_after(start, request.POST.get('minutes') or ''),
+            notes='',
+            idempotency_key=request.POST.get('idempotency_key') or '',
+        )
+    except ValidationError as exc:
+        record_functional_attributes(event_type='sleep', outcome='failure')
+        return render(
+            request,
+            'tracker/save_result.html',
+            {'error': ' '.join(exc.messages), 'saved': False},
+            status=400,
+        )
+    except Exception:
+        log_quick_failure('sleep')
+        record_functional_attributes(event_type='sleep', outcome='save_failed')
+        return render(request, 'tracker/save_result.html', {'saved': False}, status=500)
+    record_functional_attributes(event_type='sleep', outcome='success')
+    response = render(
+        request,
+        'tracker/save_result.html',
+        {'saved': True, 'replay': replay},
+    )
+    response['HX-Trigger'] = 'refresh-timeline'
+    return response
 
 
 @require_POST

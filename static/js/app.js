@@ -108,12 +108,32 @@
   function refreshPartial() {
     var root = pollRoot();
     if (!root || !window.htmx) return;
+    if (root.id === 'activity') {
+      htmx.ajax('GET', root.getAttribute('data-partial-url'), {
+        target: '#activity',
+        swap: 'innerHTML',
+      });
+      return;
+    }
     var panel = document.getElementById('range-panel');
     htmx.ajax('GET', partialUrl(), {
       target: panel ? '#range-panel' : '#timeline',
       swap: 'innerHTML',
     });
   }
+
+  document.body.addEventListener('click', function (event) {
+    var open = event.target.closest && event.target.closest('#open-summary');
+    if (open) {
+      var dialog = document.getElementById('summary-sheet');
+      if (dialog && dialog.showModal) dialog.showModal();
+    }
+    var close = event.target.closest && event.target.closest('[data-close-sheet]');
+    if (close) {
+      var sheet = document.getElementById('summary-sheet');
+      if (sheet && sheet.close) sheet.close();
+    }
+  });
 
   function tick() {
     var root = pollRoot();

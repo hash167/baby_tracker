@@ -71,7 +71,12 @@ def same_household(membership, event) -> bool:
     return event.household_id == membership.household_id
 
 
-VISIBLE_KINDS = (Event.Kind.DIAPER, Event.Kind.FEED)
+VISIBLE_KINDS = (
+    Event.Kind.DIAPER,
+    Event.Kind.FEED,
+    Event.Kind.BOTTLE,
+    Event.Kind.PUMP,
+)
 ARCHIVED_KINDS = (
     Event.Kind.SLEEP,
     Event.Kind.GROWTH,

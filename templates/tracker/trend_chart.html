@@ -1,0 +1,76 @@
+{% load care %}
+<section class="trend-card">
+  <h2>{{ title }}</h2>
+  <p class="muted">{{ caption }}</p>
+  <svg class="chart" viewBox="0 0 320 100" role="img" aria-label="{{ title }}">
+    <title>{{ title }}</title>
+    {% for bar in chart %}
+      {% for segment in bar.segments %}
+        {% if segment.height > 0 %}
+          <rect x="{{ segment.x }}" y="{{ segment.y }}" width="{{ segment.width }}" height="{{ segment.height }}" fill="{{ segment.color }}">
+            <title>{{ bar.label }} {{ segment.name }}</title>
+          </rect>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </svg>
+  <div class="trend-scroll">
+    <table class="trend-table">
+      <caption>{{ title }}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Day</th>
+          {% if table == "diapers" %}
+            <th scope="col">Wet</th>
+            <th scope="col">Dirty</th>
+            <th scope="col">Wet + dirty</th>
+            <th scope="col">Dry</th>
+          {% elif table == "feeds" %}
+            <th scope="col">Feeds</th>
+          {% elif table == "nursing" %}
+            <th scope="col">Left min</th>
+            <th scope="col">Right min</th>
+          {% elif table == "bottles" %}
+            <th scope="col">Bottles</th>
+          {% elif table == "bottle_ml" %}
+            <th scope="col">ml</th>
+          {% elif table == "pumps" %}
+            <th scope="col">Pumps</th>
+          {% elif table == "pump_ml" %}
+            <th scope="col">ml</th>
+          {% elif table == "sleep" %}
+            <th scope="col">Hours</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <th scope="row">{{ row.label }}</th>
+            {% if table == "diapers" %}
+              <td>{{ row.wet }}</td>
+              <td>{{ row.dirty }}</td>
+              <td>{{ row.both }}</td>
+              <td>{{ row.dry }}</td>
+            {% elif table == "feeds" %}
+              <td>{{ row.feeds }}</td>
+            {% elif table == "nursing" %}
+              <td>{{ row.left_minutes|one_decimal }}</td>
+              <td>{{ row.right_minutes|one_decimal }}</td>
+            {% elif table == "bottles" %}
+              <td>{{ row.bottles }}</td>
+            {% elif table == "bottle_ml" %}
+              <td>{{ row.bottle_ml|one_decimal }}</td>
+            {% elif table == "pumps" %}
+              <td>{{ row.pumps }}</td>
+            {% elif table == "pump_ml" %}
+              <td>{{ row.pump_ml|one_decimal }}</td>
+            {% elif table == "sleep" %}
+              <td>{{ row.sleep_hours|one_decimal }}</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

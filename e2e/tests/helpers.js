@@ -7,7 +7,7 @@ async function login(page, username) {
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+  await expect(page.locator('#activity')).toBeVisible();
 }
 
 module.exports = { login, PASSWORD };

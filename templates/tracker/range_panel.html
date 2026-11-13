@@ -26,6 +26,10 @@
       Right {{ summary.feeds.right|duration }},
       Total {{ summary.feeds.duration|duration }}
     </p>
+    <p><strong>Bottle feeds</strong> <span id="bottle-total">{{ summary.bottles.total }}</span></p>
+    <p>Total <span id="bottle-volume">{{ summary.bottles.volume_ml|ml }}</span></p>
+    <p><strong>Pumps</strong> <span id="pump-total">{{ summary.pumps.total }}</span></p>
+    <p>Total <span id="pump-volume">{{ summary.pumps.volume_ml|ml }}</span></p>
     <ul class="kind-counts">
       {% for item in summary.other %}
         <li>{{ item.label }} <span data-kind="{{ item.kind }}">{{ item.count }}</span></li>

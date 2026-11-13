@@ -417,6 +417,8 @@ class Event(AuditableModel):
         EVENT = 'event', 'event'
         DIAPER = 'diaper', 'diaper'
         FEED = 'feed', 'feed'
+        BOTTLE = 'bottle', 'bottle'
+        PUMP = 'pump', 'pump'
         SLEEP = 'sleep', 'sleep'
         GROWTH = 'growth', 'growth'
         MEDICAL = 'medical', 'medical'

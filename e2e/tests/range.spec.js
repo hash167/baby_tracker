@@ -5,6 +5,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test('timeline ranges switch with HTMX and show counts', async ({ page }) => {
   await login(page, 'synth_parent');
+  await page.goto('/timeline/');
   await expect(page.getByRole('heading', { name: 'Last 24 hours' })).toBeVisible();
   const dayLink = page.getByRole('link', { name: '24 hours' });
   const box = await dayLink.boundingBox();

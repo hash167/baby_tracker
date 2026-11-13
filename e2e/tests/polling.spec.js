@@ -50,7 +50,9 @@ test('a visible timeline picks up another device and pauses while hidden', async
     },
   });
   expect(posted.ok()).toBeTruthy();
-  await expect(viewer.getByText('dry').first()).toBeVisible({ timeout: pollMs * 4 });
+  await expect(viewer.locator('#activity .diaper-label', { hasText: 'Dry' }).first()).toBeVisible({
+    timeout: pollMs * 4,
+  });
   await first.close();
   await second.close();
 });

@@ -71,6 +71,31 @@
   </form>
   <div id="save-result"></div>
 
+  <h2>Bottle</h2>
+  <form class="stack" method="post" action="{% url 'bottle-create' %}"
+        hx-post="{% url 'bottle-create' %}"
+        hx-target="#save-result"
+        hx-swap="innerHTML"
+        data-idempotent
+        hx-disabled-elt="button">
+    {% csrf_token %}
+    <input type="hidden" name="idempotency_key" value="">
+    <label>Volume
+      <input name="volume" inputmode="decimal" autocomplete="off">
+    </label>
+    <label>Unit
+      <select name="unit">
+        <option value="ml">ml</option>
+        <option value="floz">fl oz</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button type="submit" name="bottle_type" value="breast_milk">Breast milk</button>
+      <button type="submit" name="bottle_type" value="formula">Formula</button>
+      <button type="submit" name="bottle_type" value="mixed">Mixed</button>
+    </div>
+  </form>
+
   {% if range_mode %}
     <div id="range-panel">
       {% include "tracker/range_panel.html" %}

@@ -1,0 +1,63 @@
+{% load care %}
+{% if not summary %}
+<p>No baby in this household yet.</p>
+{% else %}
+<div class="sheet" role="document" aria-label="Summary">
+  <div class="sheet-bar">
+    <h2>Summary</h2>
+    <button type="button" class="icon-button" data-close-sheet aria-label="Close">×</button>
+  </div>
+  <div class="range-switch" role="group" aria-label="Summary range">
+    {% for key, label in summary_choices %}
+      <a href="{% url 'activity-summary' %}?range={{ key }}"
+         hx-get="{% url 'activity-summary' %}?range={{ key }}"
+         hx-target="#summary-body"
+         hx-swap="innerHTML"
+         {% if summary.key == key %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </div>
+  <ul class="sheet-list">
+    <li>
+      <span class="blob blob-feed">{% include "tracker/icon_breast.html" %}</span>
+      <div>
+        <p class="sheet-name">Breastfeed</p>
+        <p>{{ summary.breast.count }} · {{ summary.breast.total }} · L {{ summary.breast.left }} · R {{ summary.breast.right }}</p>
+      </div>
+      <span class="pill">{{ summary.breast.count }}</span>
+    </li>
+    <li>
+      <span class="blob blob-feed">{% include "tracker/icon_bottle.html" %}</span>
+      <div>
+        <p class="sheet-name">Bottle feed</p>
+        <p>{{ summary.bottle.count }} · {{ summary.bottle.floz }} · {{ summary.bottle.ml }}</p>
+        <p class="muted">Breast milk {{ summary.bottle.breast_ml }} · Formula {{ summary.bottle.formula_ml }}</p>
+      </div>
+      <span class="pill pill-feed">{{ summary.bottle.count }}</span>
+    </li>
+    <li>
+      <span class="blob blob-pump">{% include "tracker/icon_pump.html" %}</span>
+      <div>
+        <p class="sheet-name">Pump</p>
+        <p>{{ summary.pump.count }} · {{ summary.pump.ml }}</p>
+      </div>
+      <span class="pill pill-pump">{{ summary.pump.count }}</span>
+    </li>
+    <li>
+      <span class="blob blob-diaper">{% include "tracker/icon_diaper.html" %}</span>
+      <div>
+        <p class="sheet-name">Diaper</p>
+        <p>{{ summary.diaper.wet }} wet · {{ summary.diaper.dirty }} dirty · {{ summary.diaper.both }} mix · {{ summary.diaper.dry }} dry</p>
+      </div>
+      <span class="pill pill-diaper">{{ summary.diaper.count }}</span>
+    </li>
+    <li>
+      <span class="blob blob-sleep">{% include "tracker/icon_moon.html" %}</span>
+      <div>
+        <p class="sheet-name">Sleep</p>
+        <p>{{ summary.sleep.count }} · {{ summary.sleep.hours }}</p>
+      </div>
+      <span class="pill pill-sleep">{{ summary.sleep.count }}</span>
+    </li>
+  </ul>
+</div>
+{% endif %}

@@ -53,11 +53,22 @@ DIAPER_STATUS = {
     'mixed': Event.DiaperType.BOTH,
     'both': Event.DiaperType.BOTH,
     'wet and dirty': Event.DiaperType.BOTH,
+    'dirty wet': Event.DiaperType.BOTH,
     'dry': Event.DiaperType.DRY,
 }
 
+BOTTLE_TYPES = {
+    'breast milk': 'breast_milk',
+    'formula': 'formula',
+    'breast milk formula': 'mixed',
+}
+
+ML_PER_FLOZ = 29.5735295625
+
 RECORD_KIND = {
     'breastfeed': Event.Kind.FEED,
+    'bottle feed': Event.Kind.BOTTLE,
+    'pump': Event.Kind.PUMP,
     'diaper': Event.Kind.DIAPER,
     'sleep': Event.Kind.SLEEP,
     'growth': Event.Kind.GROWTH,
@@ -161,10 +172,14 @@ def _parse_raw(number: int, raw: dict) -> ParsedRow:
     _attach_times(row, cleaned)
     if kind == Event.Kind.FEED:
         _breastfeed(row, cleaned)
+    elif kind == Event.Kind.BOTTLE:
+        _bottle(row, cleaned)
+    elif kind == Event.Kind.PUMP:
+        _pump(row, cleaned)
     elif kind == Event.Kind.DIAPER:
         _diaper(row, cleaned)
     elif kind == Event.Kind.SLEEP:
-        row.mapped['archive'] = {'ended_at': row.mapped.get('ended_at')}
+        _sleep(row, cleaned)
     elif kind == Event.Kind.GROWTH:
         _growth(row, cleaned)
     elif kind == Event.Kind.MEDICAL:
@@ -311,6 +326,13 @@ def _duration(row: ParsedRow, raw: str, unit: str, label: str):
     return seconds
 
 
+def _strip_nontimer(value: str) -> tuple[str, bool]:
+    text = value.strip()
+    if text.lower().endswith('.nontimer'):
+        return text[: -len('.nontimer')].strip(), True
+    return text, False
+
+
 def _breastfeed(row: ParsedRow, cleaned: dict) -> None:
     unit = cleaned.get('[Breastfeed] Duration Unit', '')
     left = _duration(
@@ -327,14 +349,22 @@ def _breastfeed(row: ParsedRow, cleaned: dict) -> None:
     )
     row.mapped['left_seconds'] = left
     row.mapped['right_seconds'] = right
-    start = _side(cleaned.get('[Breastfeed] Start Side', ''))
-    end = _side(cleaned.get('[Breastfeed] End Side', ''))
-    if cleaned.get('[Breastfeed] Start Side', '') and start is None:
+    start_raw = cleaned.get('[Breastfeed] Start Side', '') or cleaned.get(
+        '[Breastfeed] Begin Side', ''
+    )
+    end_raw = cleaned.get('[Breastfeed] End Side', '')
+    start_text, start_manual = _strip_nontimer(start_raw)
+    end_text, end_manual = _strip_nontimer(end_raw)
+    start = _side(start_text)
+    end = _side(end_text)
+    if start_raw and start is None:
         row.warn('unknown_side', label='start')
-    if cleaned.get('[Breastfeed] End Side', '') and end is None:
+    if end_raw and end is None:
         row.warn('unknown_side', label='end')
     row.mapped['start_side'] = start or ''
     row.mapped['end_side'] = end or ''
+    if start_manual or end_manual:
+        row.mapped['manual_entry'] = True
 
 
 def _side(value: str) -> str | None:
@@ -348,8 +378,124 @@ def _side(value: str) -> str | None:
     return None
 
 
+def _measurement(row: ParsedRow, amount: str, unit: str, label: str):
+    """A volume. An empty amount is unknown and does not warn, even if the unit is empty."""
+    if amount == '':
+        return None
+    try:
+        number = float(amount)
+    except ValueError:
+        row.warn('bad_measurement', field=label)
+        return {'amount': amount, 'unit': unit, 'ml': None}
+    normalized = unit.strip().lower()
+    if normalized == 'ml':
+        ml = number
+    elif normalized == 'floz':
+        ml = number * ML_PER_FLOZ
+    elif normalized == '':
+        row.warn('missing_or_unknown_unit', label=label, unit='')
+        ml = None
+    else:
+        row.warn('missing_or_unknown_unit', label=label, unit=unit)
+        ml = None
+    return {'amount': number, 'unit': unit.strip(), 'ml': ml}
+
+
+def _known_ml(items) -> float | None:
+    values = [
+        item['ml'] for item in items if item is not None and item.get('ml') is not None
+    ]
+    if not values:
+        return None
+    return float(sum(values))
+
+
+def _bottle(row: ParsedRow, cleaned: dict) -> None:
+    raw_type = cleaned.get('[Bottle Feed] Type', '')
+    bottle_type = ''
+    if raw_type:
+        bottle_type = BOTTLE_TYPES.get(raw_type.strip().lower(), '')
+        if not bottle_type:
+            row.warn('unknown_enum', field='bottle', value=raw_type)
+    volume = _measurement(
+        row,
+        cleaned.get('[Bottle Feed] Volume', ''),
+        cleaned.get('[Bottle Feed] Volume Unit', ''),
+        'bottle_volume',
+    )
+    breast = _measurement(
+        row,
+        cleaned.get('[Bottle Feed] Breast Milk Volume', ''),
+        cleaned.get('[Bottle Feed] Breast Milk Volume Unit', ''),
+        'breast_milk_volume',
+    )
+    formula = _measurement(
+        row,
+        cleaned.get('[Bottle Feed] Formula Volume', ''),
+        cleaned.get('[Bottle Feed] Formula Volume Unit', ''),
+        'formula_volume',
+    )
+    volume_ml = volume.get('ml') if volume and volume.get('ml') is not None else None
+    if volume_ml is None:
+        volume_ml = _known_ml((breast, formula))
+    row.mapped['archive'] = {
+        'bottle_type': bottle_type,
+        'bottle_type_raw': raw_type,
+        'formula_name': cleaned.get('[Bottle Feed] Formula Name', ''),
+        'volume': volume,
+        'breast_milk': breast,
+        'formula': formula,
+        'volume_ml': volume_ml,
+    }
+
+
+def _pump(row: ParsedRow, cleaned: dict) -> None:
+    if not row.mapped.get('ended_at'):
+        epoch = _epoch(cleaned.get('[Pump] End Date/time (Epoch)', ''))
+        if epoch not in (None, 'invalid'):
+            row.mapped['ended_at'] = epoch.astimezone(timezone.utc).isoformat()
+        elif epoch == 'invalid':
+            row.warn('invalid_epoch', label='pump_end')
+    left = _measurement(
+        row,
+        cleaned.get('[Pump] Left Volume', ''),
+        cleaned.get('[Pump] Left Volume Unit', ''),
+        'pump_left',
+    )
+    right = _measurement(
+        row,
+        cleaned.get('[Pump] Right Volume', ''),
+        cleaned.get('[Pump] Right Volume Unit', ''),
+        'pump_right',
+    )
+    total = _measurement(
+        row,
+        cleaned.get('[Pump] Total Volume', ''),
+        cleaned.get('[Pump] Total Volume Unit', ''),
+        'pump_total',
+    )
+    volume_ml = total.get('ml') if total and total.get('ml') is not None else None
+    if volume_ml is None:
+        volume_ml = _known_ml((left, right))
+    duration = cleaned.get('[Pump] Duration (Seconds)', '')
+    row.mapped['archive'] = {
+        'left': left,
+        'right': right,
+        'total': total,
+        'duration_seconds': duration,
+        'volume_ml': volume_ml,
+    }
+
+
 def _diaper(row: ParsedRow, cleaned: dict) -> None:
-    raw = cleaned.get('[Diaper] Status', '')
+    raw = cleaned.get('[Diaper] Type', '') or cleaned.get('[Diaper] Status', '')
+    detail = {
+        'detail': cleaned.get('[Diaper] Detail', ''),
+        'dirty_color': cleaned.get('[Diaper] Dirty Color', ''),
+        'dirty_texture': cleaned.get('[Diaper] Dirty Texture', ''),
+    }
+    if any(detail.values()):
+        row.mapped['archive'] = detail
     if raw == '':
         row.warn('missing_diaper_status')
         row.mapped['diaper_type'] = ''
@@ -363,13 +509,36 @@ def _diaper(row: ParsedRow, cleaned: dict) -> None:
     row.mapped['diaper_type'] = mapped
 
 
+def _sleep(row: ParsedRow, cleaned: dict) -> None:
+    if not row.mapped.get('ended_at'):
+        zone = ZoneInfo(row.mapped.get('timezone') or 'UTC')
+        readable = _wall_time(
+            row,
+            cleaned.get('[Sleep] End Date/time', ''),
+            zone,
+            'sleep_end',
+        )
+        epoch = _epoch(cleaned.get('[Sleep] End Date/time (Epoch)', ''))
+        if readable or epoch:
+            _compare_clocks(row, readable, epoch, 'sleep_end')
+            chosen = _choose_instant(readable, epoch)
+            if chosen is not None:
+                row.mapped['ended_at'] = chosen.astimezone(timezone.utc).isoformat()
+    row.mapped['archive'] = {
+        'ended_at': row.mapped.get('ended_at'),
+        'duration_seconds': cleaned.get('[Sleep] Duration (Seconds)', ''),
+    }
+
+
 def _growth(row: ParsedRow, cleaned: dict) -> None:
     weight = cleaned.get('[Growth] Weight', '')
     weight_unit = cleaned.get('[Growth] Weight Unit', '')
     height = cleaned.get('[Growth] Height', '')
     height_unit = cleaned.get('[Growth] Height Unit', '')
-    head = cleaned.get('[Growth] Head', '')
-    head_unit = cleaned.get('[Growth] Head Unit', '')
+    head = cleaned.get('[Growth] Head Size', '') or cleaned.get('[Growth] Head', '')
+    head_unit = cleaned.get('[Growth] Head Size Unit', '') or cleaned.get(
+        '[Growth] Head Unit', ''
+    )
     _flag_unit_pair(row, weight, weight_unit, 'weight')
     _flag_unit_pair(row, height, height_unit, 'height')
     _flag_unit_pair(row, head, head_unit, 'head')
@@ -390,8 +559,9 @@ def _medical(row: ParsedRow, cleaned: dict) -> None:
     )
     if value != '' and unit != '':
         _temperature(row, value, unit)
+    name = cleaned.get('[Medical] Medication', '') or cleaned.get('[Medical] Name', '')
     row.mapped['archive'] = {
-        'name': cleaned.get('[Medical] Name', ''),
+        'name': name,
         'dose': cleaned.get('[Medical] Dose', ''),
         'dose_unit': cleaned.get('[Medical] Dose Unit', ''),
         'temperature': cleaned.get('[Temperature] Value', ''),
@@ -653,12 +823,19 @@ def _write_row(batch, row, actor):
         fields['diaper_type'] = mapped.get('diaper_type') or ''
         if not fields['diaper_type']:
             fields['kind'] = Event.Kind.UNKNOWN
-            fields['archive'] = {'raw_status': mapped.get('raw_status', '')}
+            fields['archive'] = {
+                'raw_status': mapped.get('raw_status', ''),
+                **(mapped.get('archive') or {}),
+            }
     if kind == Event.Kind.FEED:
         fields.update(
             {
                 'feed_state': Event.FeedState.FINISHED,
-                'feed_source': Event.FeedSource.IMPORT,
+                'feed_source': (
+                    Event.FeedSource.MANUAL
+                    if mapped.get('manual_entry')
+                    else Event.FeedSource.IMPORT
+                ),
                 'feed_ended_at': ended,
                 'left_seconds': mapped.get('left_seconds'),
                 'right_seconds': mapped.get('right_seconds'),

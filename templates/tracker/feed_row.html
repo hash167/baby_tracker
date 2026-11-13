@@ -1,0 +1,12 @@
+<li>
+  <a class="act-line" href="{% url 'event-edit' row.pk %}">
+    <span class="when">{{ row.clock }}</span>
+    <span class="mini-icon" aria-hidden="true">
+      {% if row.icon == 'bottle' %}{% include "tracker/icon_bottle.html" %}{% else %}{% include "tracker/icon_breast.html" %}{% endif %}
+    </span>
+    <span class="label">{{ row.label }}</span>
+    <span class="meter"><span class="fill fill-feed" style="width: {{ row.bar_pct }}%"></span></span>
+    <span class="value">{{ row.value }}</span>
+    <span class="chevron" aria-hidden="true">›</span>
+  </a>
+</li>
